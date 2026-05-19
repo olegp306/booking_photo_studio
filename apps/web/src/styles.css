@@ -1,0 +1,427 @@
+:root {
+  color: #191714;
+  background: #f7f4ef;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+a {
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell,
+.detail-shell {
+  min-height: 100vh;
+  margin: 0 auto;
+  max-width: 520px;
+  background: #fffaf4;
+  padding-bottom: 92px;
+}
+
+.hero-band {
+  padding: 22px 18px 18px;
+  background: #fff;
+  border-bottom: 1px solid #eee5da;
+}
+
+.top-bar,
+.results-head,
+.detail-title,
+.detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #8c5a3c;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 20px;
+}
+
+.icon-button,
+.filter-button,
+.map-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #eadfd2;
+  background: #fff;
+  border-radius: 999px;
+}
+
+.icon-button {
+  width: 42px;
+  height: 42px;
+}
+
+.search-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid #eadfd2;
+  border-radius: 28px;
+  background: #fffaf4;
+  box-shadow: 0 10px 24px rgba(36, 26, 18, 0.08);
+}
+
+.search-card span {
+  display: block;
+  margin-top: 2px;
+  color: #76685f;
+  font-size: 13px;
+}
+
+.filter-button {
+  width: 36px;
+  height: 36px;
+  background: #191714;
+  color: #fff;
+}
+
+.filter-section {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  padding: 14px 18px 0;
+  scrollbar-width: none;
+}
+
+.filter-section::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  border: 1px solid #eadfd2;
+  border-radius: 999px;
+  background: #fff;
+  padding: 9px 13px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.chip.soft {
+  background: #f4ebe1;
+}
+
+.chip-active {
+  border-color: #191714;
+  background: #191714;
+  color: #fff;
+}
+
+.results-head {
+  padding: 22px 18px 10px;
+}
+
+.map-pill {
+  gap: 6px;
+  padding: 9px 12px;
+  font-weight: 700;
+}
+
+.studio-list {
+  display: grid;
+  gap: 18px;
+  padding: 0 18px 18px;
+}
+
+.studio-card {
+  position: relative;
+}
+
+.image-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.image-button img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.22;
+  object-fit: cover;
+}
+
+.save-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.saved {
+  color: #d43d51;
+}
+
+.card-body {
+  padding-top: 10px;
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 800;
+  text-align: left;
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #191714;
+}
+
+.card-body p,
+.description,
+.room-card p {
+  color: #6e6259;
+  line-height: 1.45;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0;
+}
+
+.tag-row span,
+.booking-mode {
+  border-radius: 999px;
+  background: #f0e5d8;
+  padding: 5px 8px;
+  color: #6a4630;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.price-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bottom-nav,
+.booking-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  background: #fff;
+  border-top: 1px solid #eadfd2;
+}
+
+.bottom-nav a {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 25%;
+  max-width: 130px;
+  padding: 10px 4px 12px;
+  color: #7d7269;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.bottom-nav .active {
+  color: #191714;
+  font-weight: 800;
+}
+
+.detail-hero {
+  position: relative;
+}
+
+.detail-hero img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 0.95;
+  object-fit: cover;
+}
+
+.detail-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  left: 14px;
+}
+
+.detail-actions > div {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button.solid {
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.detail-content {
+  padding: 20px 18px 110px;
+}
+
+.detail-title h1 {
+  font-size: 26px;
+}
+
+.large {
+  flex: 0 0 auto;
+  font-weight: 800;
+}
+
+.roomy {
+  margin: 14px 0 22px;
+}
+
+.detail-section {
+  padding: 20px 0;
+  border-top: 1px solid #eadfd2;
+}
+
+.detail-section h2 {
+  margin-bottom: 12px;
+}
+
+.room-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.room-card + .room-card {
+  margin-top: 10px;
+}
+
+.room-card span {
+  color: #8b7a6b;
+  font-size: 13px;
+}
+
+.amenity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.amenity-grid span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f5ecdf;
+  font-size: 14px;
+}
+
+.rules-list {
+  margin: 0;
+  padding-left: 19px;
+  color: #6e6259;
+}
+
+.rules-list li + li {
+  margin-top: 8px;
+}
+
+.booking-bar {
+  align-items: center;
+  justify-content: space-between;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 12px 18px;
+}
+
+.booking-bar span {
+  display: block;
+  color: #6e6259;
+  font-size: 13px;
+}
+
+.booking-bar button {
+  border: 0;
+  border-radius: 999px;
+  background: #d43d51;
+  color: #fff;
+  padding: 13px 18px;
+  font-weight: 800;
+}
+
+@media (min-width: 760px) {
+  body {
+    background: #e9ded1;
+  }
+
+  .app-shell,
+  .detail-shell {
+    margin-top: 24px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(37, 28, 20, 0.18);
+  }
+}

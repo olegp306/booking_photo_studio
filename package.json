@@ -1,0 +1,22 @@
+{
+  "name": "photo-studio-marketplace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @studio-market/web",
+    "dev:web": "npm run dev --workspace @studio-market/web",
+    "dev:api": "npm run dev --workspace @studio-market/api",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "typescript": "^5.7.2"
+  }
+}
