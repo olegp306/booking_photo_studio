@@ -87,6 +87,20 @@ export const loadOwnerBookings = async (studioSlug?: string): Promise<BookingInt
   }
 };
 
+export const loadCustomerBookings = async (guestEmail?: string): Promise<BookingIntent[]> => {
+  const params = new URLSearchParams();
+  if (guestEmail) params.set("guestEmail", guestEmail);
+
+  try {
+    const response = await fetch(`${API_BASE}/bookings?${params.toString()}`);
+    if (!response.ok) throw new Error("Failed to load bookings");
+    const payload = (await response.json()) as { bookings: BookingIntent[] };
+    return payload.bookings;
+  } catch {
+    return [];
+  }
+};
+
 export const decideOwnerBooking = async (
   booking: BookingIntent,
   decision: OwnerBookingDecision

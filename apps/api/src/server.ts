@@ -130,6 +130,20 @@ export const buildServer = () => {
 
   app.get<{
     Querystring: {
+      guestEmail?: string;
+    };
+  }>("/bookings", async (request) => {
+    const bookings = request.query.guestEmail
+      ? bookingIntents.filter((booking) => booking.guestEmail === request.query.guestEmail)
+      : bookingIntents;
+
+    return {
+      bookings
+    };
+  });
+
+  app.get<{
+    Querystring: {
       studioSlug?: string;
     };
   }>("/owner/bookings", async (request) => {

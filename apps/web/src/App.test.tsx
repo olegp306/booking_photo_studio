@@ -80,4 +80,32 @@ describe("App", () => {
 
     expect(await screen.findByText("Awaiting payment")).toBeInTheDocument();
   });
+
+  it("shows customer bookings and payment call to action after owner approval", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(await screen.findByRole("button", { name: "11:00 Product Corner CZK 1,400" }));
+    await user.type(screen.getByLabelText("Name"), "Marta Client");
+    await user.type(screen.getByLabelText("Email"), "marta@example.com");
+    await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await user.click(screen.getByRole("button", { name: "Request booking" }));
+    await screen.findByText("Request sent: waiting for owner approval.");
+
+    await user.click(screen.getByRole("button", { name: "Back to results" }));
+    await user.click(screen.getByRole("link", { name: "Bookings" }));
+
+    expect(await screen.findByRole("heading", { name: "My bookings" })).toBeInTheDocument();
+    expect(screen.getByText("Needs review")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Host" }));
+    await user.click(await screen.findByRole("button", { name: "Approve Marta Client booking" }));
+    await user.click(screen.getByRole("link", { name: "Bookings" }));
+
+    expect(await screen.findByText("Awaiting payment")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
+
+    expect(await screen.findByText("Checkout ready: Stripe payment will open here.")).toBeInTheDocument();
+  });
 });

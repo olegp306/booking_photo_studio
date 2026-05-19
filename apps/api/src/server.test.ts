@@ -131,4 +131,38 @@ describe("studio API", () => {
     expect(approved.statusCode).toBe(200);
     expect(approved.json().booking.status).toBe("awaiting_payment");
   });
+
+  it("returns customer bookings by guest email", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-product",
+        date: "2026-06-12",
+        startTime: "11:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        shootType: "product",
+        message: "Need product table"
+      }
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/bookings?guestEmail=marta@example.com"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().bookings).toHaveLength(1);
+    expect(response.json().bookings[0]).toEqual(
+      expect.objectContaining({
+        guestEmail: "marta@example.com",
+        studioName: "Studio Lumen Karlin",
+        status: "pending_owner_approval"
+      })
+    );
+  });
 });
