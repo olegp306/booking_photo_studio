@@ -1,9 +1,22 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
 
 describe("App", () => {
+  beforeEach(() => {
+    window.location.hash = "";
+  });
+
+  it("opens saved view directly with an empty state", async () => {
+    window.location.hash = "#saved";
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Saved studios" })).toBeInTheDocument();
+    expect(screen.getByText("No saved studios yet")).toBeInTheDocument();
+  });
+
   it("renders seeded Prague studios", async () => {
     render(<App />);
 
@@ -107,5 +120,20 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
 
     expect(await screen.findByText("Checkout ready: Stripe payment will open here.")).toBeInTheDocument();
+  });
+
+  it("shows saved studios and opens a saved studio detail", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByText("Studio Lumen Karlin");
+    await user.click(screen.getAllByRole("button", { name: "Save studio" })[0]);
+    await user.click(screen.getByRole("link", { name: "Saved" }));
+
+    expect(await screen.findByRole("heading", { name: "Saved studios" })).toBeInTheDocument();
+    expect(screen.getByText("Studio Lumen Karlin")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Studio Lumen Karlin" }));
+
+    expect(await screen.findByRole("heading", { name: "Main Daylight Room" })).toBeInTheDocument();
   });
 });

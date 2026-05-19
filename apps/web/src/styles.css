@@ -511,6 +511,10 @@ h2 {
   padding: 18px;
 }
 
+.saved-list {
+  padding-top: 18px;
+}
+
 .owner-request,
 .empty-state {
   border: 1px solid #eadfd2;

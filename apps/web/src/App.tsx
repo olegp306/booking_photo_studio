@@ -51,7 +51,14 @@ const accessibleMoney = (amount: number, currency: string) =>
 
 const selectedFeatures: FeatureId[] = ["natural-light", "cyclorama", "blackout", "bedroom-set"];
 const shootTypes: ShootType[] = ["portrait", "fashion", "maternity", "product", "video", "content"];
-type AppView = "explore" | "bookings" | "host";
+type AppView = "explore" | "saved" | "bookings" | "host";
+
+const initialViewFromHash = (): AppView => {
+  if (window.location.hash === "#saved") return "saved";
+  if (window.location.hash === "#bookings") return "bookings";
+  if (window.location.hash === "#profile") return "host";
+  return "explore";
+};
 
 export const App = () => {
   const [studios, setStudios] = useState<Studio[]>([]);
@@ -59,7 +66,7 @@ export const App = () => {
   const [activeFeature, setActiveFeature] = useState<FeatureId | undefined>();
   const [selectedStudio, setSelectedStudio] = useState<Studio | undefined>();
   const [saved, setSaved] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<AppView>(() => (window.location.hash === "#bookings" ? "bookings" : "explore"));
+  const [view, setView] = useState<AppView>(initialViewFromHash);
   const [ownerBookings, setOwnerBookings] = useState<BookingIntent[]>([]);
   const [customerBookings, setCustomerBookings] = useState<BookingIntent[]>([]);
   const [lastGuestEmail, setLastGuestEmail] = useState<string | undefined>();
@@ -131,7 +138,24 @@ export const App = () => {
       <CustomerBookings
         bookings={customerBookings}
         onBackToExplore={() => setView("explore")}
+        onOpenSaved={() => setView("saved")}
         onOpenHost={() => setView("host")}
+      />
+    );
+  }
+
+  if (view === "saved") {
+    const savedStudios = studios.filter((studio) => saved.has(studio.slug));
+
+    return (
+      <SavedStudios
+        savedCount={saved.size}
+        savedStudios={savedStudios}
+        onBackToExplore={() => setView("explore")}
+        onOpenBookings={() => setView("bookings")}
+        onOpenHost={() => setView("host")}
+        onOpenStudio={setSelectedStudio}
+        onSave={toggleSaved}
       />
     );
   }
@@ -141,6 +165,7 @@ export const App = () => {
       <OwnerDashboard
         bookings={ownerBookings}
         onBackToExplore={() => setView("explore")}
+        onOpenSaved={() => setView("saved")}
         onOpenBookings={() => setView("bookings")}
         onDecideBooking={async (booking, decision) => {
           const updated = await decideOwnerBooking(booking, decision);
@@ -228,7 +253,7 @@ export const App = () => {
           <Search size={19} />
           Explore
         </a>
-        <a href="#saved">
+        <a href="#saved" onClick={() => setView("saved")}>
           <Heart size={19} />
           Saved
         </a>
@@ -481,6 +506,7 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
 interface OwnerDashboardProps {
   bookings: BookingIntent[];
   onBackToExplore: () => void;
+  onOpenSaved: () => void;
   onOpenBookings: () => void;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
 }
@@ -501,10 +527,11 @@ const statusLabel = (status: BookingIntent["status"]) => {
 interface CustomerBookingsProps {
   bookings: BookingIntent[];
   onBackToExplore: () => void;
+  onOpenSaved: () => void;
   onOpenHost: () => void;
 }
 
-const CustomerBookings = ({ bookings, onBackToExplore, onOpenHost }: CustomerBookingsProps) => {
+const CustomerBookings = ({ bookings, onBackToExplore, onOpenSaved, onOpenHost }: CustomerBookingsProps) => {
   const [checkoutReadyFor, setCheckoutReadyFor] = useState<string | undefined>();
 
   return (
@@ -573,7 +600,7 @@ const CustomerBookings = ({ bookings, onBackToExplore, onOpenHost }: CustomerBoo
           <Search size={19} />
           Explore
         </a>
-        <a href="#saved">
+        <a href="#saved" onClick={onOpenSaved}>
           <Heart size={19} />
           Saved
         </a>
@@ -590,7 +617,88 @@ const CustomerBookings = ({ bookings, onBackToExplore, onOpenHost }: CustomerBoo
   );
 };
 
-const OwnerDashboard = ({ bookings, onBackToExplore, onOpenBookings, onDecideBooking }: OwnerDashboardProps) => (
+interface SavedStudiosProps {
+  savedCount: number;
+  savedStudios: Studio[];
+  onBackToExplore: () => void;
+  onOpenBookings: () => void;
+  onOpenHost: () => void;
+  onOpenStudio: (studio: Studio) => void;
+  onSave: (slug: string) => void;
+}
+
+const SavedStudios = ({
+  savedCount,
+  savedStudios,
+  onBackToExplore,
+  onOpenBookings,
+  onOpenHost,
+  onOpenStudio,
+  onSave
+}: SavedStudiosProps) => (
+  <main className="app-shell saved-shell">
+    <section className="hero-band owner-hero">
+      <div className="top-bar">
+        <div>
+          <p className="eyebrow">Shortlist</p>
+          <h1>Saved studios</h1>
+        </div>
+        <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
+          <Search size={20} />
+        </button>
+      </div>
+      <div className="owner-summary">
+        <Heart size={20} />
+        <div>
+          <strong>{savedCount} saved</strong>
+          <span>Keep a shortlist to share with a photographer or client.</span>
+        </div>
+      </div>
+    </section>
+
+    {savedStudios.length === 0 ? (
+      <section className="owner-list">
+        <div className="empty-state">
+          <h2>No saved studios yet</h2>
+          <p>Tap the heart on any studio to build a shortlist for the shoot.</p>
+        </div>
+      </section>
+    ) : (
+      <section className="studio-list saved-list" aria-label="Saved studios list">
+        {savedStudios.map((studio) => (
+          <StudioCard
+            key={studio.id}
+            studio={studio}
+            isSaved
+            onOpen={() => onOpenStudio(studio)}
+            onSave={() => onSave(studio.slug)}
+          />
+        ))}
+      </section>
+    )}
+
+    <nav className="bottom-nav" aria-label="Primary navigation">
+      <a href="#explore" onClick={onBackToExplore}>
+        <Search size={19} />
+        Explore
+      </a>
+      <a className="active" href="#saved">
+        <Heart size={19} />
+        Saved
+      </a>
+      <a href="#bookings" onClick={onOpenBookings}>
+        <CalendarDays size={19} />
+        Bookings
+      </a>
+      <a href="#profile" onClick={onOpenHost}>
+        <Home size={19} />
+        Host
+      </a>
+    </nav>
+  </main>
+);
+
+const OwnerDashboard = ({ bookings, onBackToExplore, onOpenSaved, onOpenBookings, onDecideBooking }: OwnerDashboardProps) => (
   <main className="app-shell owner-shell">
     <section className="hero-band owner-hero">
       <div className="top-bar">
@@ -663,7 +771,7 @@ const OwnerDashboard = ({ bookings, onBackToExplore, onOpenBookings, onDecideBoo
         <Search size={19} />
         Explore
       </a>
-      <a href="#saved">
+      <a href="#saved" onClick={onOpenSaved}>
         <Heart size={19} />
         Saved
       </a>
