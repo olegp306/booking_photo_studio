@@ -110,3 +110,61 @@ export interface StudioSearchFilters {
   amenityIds?: AmenityId[];
   bookingMode?: BookingMode;
 }
+
+export type BookingStatus =
+  | "pending_owner_approval"
+  | "awaiting_payment"
+  | "confirmed"
+  | "declined"
+  | "cancelled"
+  | "completed";
+
+export interface AvailabilitySlot {
+  id: string;
+  studioSlug: string;
+  roomId: string;
+  roomName: string;
+  date: string;
+  startTime: string;
+  durationHours: number;
+  bookingMode: BookingMode;
+  price: number;
+  currency: City["currency"];
+  available: boolean;
+}
+
+export interface StudioAvailability {
+  studioSlug: string;
+  date: string;
+  slots: AvailabilitySlot[];
+}
+
+export interface BookingIntentRequest {
+  roomId: string;
+  date: string;
+  startTime: string;
+  durationHours: number;
+  guestName: string;
+  guestEmail: string;
+  shootType: ShootType;
+  message: string;
+}
+
+export interface BookingIntent {
+  id: string;
+  studioSlug: string;
+  studioName: string;
+  roomId: string;
+  roomName: string;
+  date: string;
+  startTime: string;
+  durationHours: number;
+  bookingMode: BookingMode;
+  status: BookingStatus;
+  totalPrice: number;
+  currency: City["currency"];
+  guestName: string;
+  guestEmail: string;
+  shootType: ShootType;
+  message: string;
+}

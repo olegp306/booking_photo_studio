@@ -388,6 +388,96 @@ h2 {
   margin-top: 8px;
 }
 
+.booking-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.slot-button {
+  display: grid;
+  gap: 3px;
+  min-height: 82px;
+  padding: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+}
+
+.slot-button span {
+  color: #8c5a3c;
+  font-weight: 800;
+}
+
+.slot-button small {
+  color: #6e6259;
+  font-weight: 700;
+}
+
+.slot-active {
+  border-color: #191714;
+  background: #191714;
+  color: #fff;
+}
+
+.slot-active span,
+.slot-active small {
+  color: #fff;
+}
+
+.booking-form {
+  display: grid;
+  gap: 10px;
+}
+
+.booking-form label {
+  display: grid;
+  gap: 6px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.booking-form input,
+.booking-form textarea {
+  width: 100%;
+  border: 1px solid #dccfc0;
+  border-radius: 8px;
+  background: #fff;
+  color: #191714;
+  font: inherit;
+  padding: 12px;
+}
+
+.booking-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.request-button {
+  border: 0;
+  border-radius: 999px;
+  background: #191714;
+  color: #fff;
+  padding: 13px 18px;
+  font-weight: 800;
+}
+
+.booking-status {
+  margin: 0;
+  border-radius: 8px;
+  background: #e8f4ea;
+  color: #245a2f;
+  padding: 12px;
+  font-weight: 800;
+}
+
 .booking-bar {
   align-items: center;
   justify-content: space-between;

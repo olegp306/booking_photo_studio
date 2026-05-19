@@ -31,7 +31,31 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
 
-    expect(screen.getByText("Main Daylight Room")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Main Daylight Room" })).toBeInTheDocument();
     expect(screen.getByText("Check availability")).toBeInTheDocument();
+  });
+
+  it("shows availability slots on studio detail", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+
+    expect(await screen.findByRole("button", { name: "09:00 Main Daylight Room CZK 2,600" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "11:00 Product Corner CZK 1,400" })).toBeInTheDocument();
+  });
+
+  it("submits a request-to-book intent from studio detail", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(await screen.findByRole("button", { name: "11:00 Product Corner CZK 1,400" }));
+    await user.type(screen.getByLabelText("Name"), "Marta Client");
+    await user.type(screen.getByLabelText("Email"), "marta@example.com");
+    await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await user.click(screen.getByRole("button", { name: "Request booking" }));
+
+    expect(await screen.findByText("Request sent: waiting for owner approval.")).toBeInTheDocument();
   });
 });

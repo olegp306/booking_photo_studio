@@ -1,4 +1,15 @@
-import { searchStudios, seedStudios, type Studio, type StudioSearchFilters } from "@studio-market/shared";
+import {
+  createBookingIntent,
+  findStudioBySlug,
+  getAvailabilityForStudio,
+  searchStudios,
+  seedStudios,
+  type BookingIntent,
+  type BookingIntentRequest,
+  type Studio,
+  type StudioAvailability,
+  type StudioSearchFilters
+} from "@studio-market/shared";
 
 const API_BASE = "/api";
 
@@ -21,5 +32,41 @@ export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[
     return payload.studios;
   } catch {
     return searchStudios(seedStudios, filters);
+  }
+};
+
+export const loadAvailability = async (studio: Studio, date: string): Promise<StudioAvailability> => {
+  try {
+    const response = await fetch(`${API_BASE}/studios/${studio.slug}/availability?date=${date}`);
+    if (!response.ok) throw new Error("Failed to load availability");
+    const payload = (await response.json()) as { availability: StudioAvailability };
+    return payload.availability;
+  } catch {
+    return getAvailabilityForStudio(studio, date);
+  }
+};
+
+export const submitBookingRequest = async (
+  studioSlug: string,
+  request: BookingIntentRequest
+): Promise<BookingIntent> => {
+  try {
+    const response = await fetch(`${API_BASE}/booking-requests`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        studioSlug,
+        ...request
+      })
+    });
+    if (!response.ok) throw new Error("Failed to create booking request");
+    const payload = (await response.json()) as { booking: BookingIntent };
+    return payload.booking;
+  } catch {
+    const studio = findStudioBySlug(seedStudios, studioSlug);
+    if (!studio) throw new Error("Studio was not found");
+    return createBookingIntent(studio, request);
   }
 };

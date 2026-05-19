@@ -46,4 +46,51 @@ describe("studio API", () => {
     expect(response.statusCode).toBe(404);
     expect(response.json().error).toBe("STUDIO_NOT_FOUND");
   });
+
+  it("returns availability slots for a studio", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "GET",
+      url: "/studios/studio-lumen-karlin/availability?date=2026-06-12"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().availability.slots[0]).toEqual(
+      expect.objectContaining({
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00"
+      })
+    );
+  });
+
+  it("creates booking requests with hybrid status logic", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-product",
+        date: "2026-06-12",
+        startTime: "11:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        shootType: "product",
+        message: "Need product table"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().booking).toEqual(
+      expect.objectContaining({
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-product",
+        status: "pending_owner_approval",
+        totalPrice: 1400
+      })
+    );
+  });
 });

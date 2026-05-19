@@ -11,18 +11,20 @@ import {
   Star,
   UserRound
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   amenityLabels,
   equipmentLabels,
   featureLabels,
   shootTypeLabels,
+  type AvailabilitySlot,
+  type BookingIntent,
   type FeatureId,
   type ShootType,
   type Studio,
   type StudioSearchFilters
 } from "@studio-market/shared";
-import { loadStudios } from "./api";
+import { loadAvailability, loadStudios, submitBookingRequest } from "./api";
 
 const money = (amount: number, currency: string) =>
   new Intl.NumberFormat("en-US", {
@@ -30,6 +32,11 @@ const money = (amount: number, currency: string) =>
     currency,
     maximumFractionDigits: 0
   }).format(amount);
+
+const accessibleMoney = (amount: number, currency: string) =>
+  `${currency} ${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0
+  }).format(amount)}`;
 
 const selectedFeatures: FeatureId[] = ["natural-light", "cyclorama", "blackout", "bedroom-set"];
 const shootTypes: ShootType[] = ["portrait", "fashion", "maternity", "product", "video", "content"];
@@ -221,6 +228,38 @@ const StudioDetail = ({ studio, isSaved, onBack, onSave }: StudioDetailProps) =>
   const hero = studio.images.find((image) => image.kind === "hero") ?? studio.images[0];
   const visibleEquipment = studio.equipmentIds.slice(0, 5);
   const visibleAmenities = studio.amenityIds.slice(0, 5);
+  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | undefined>();
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [shootNotes, setShootNotes] = useState("");
+  const [booking, setBooking] = useState<BookingIntent | undefined>();
+  const bookingDate = "2026-06-12";
+
+  useEffect(() => {
+    loadAvailability(studio, bookingDate).then((availability) => {
+      setSlots(availability.slots);
+      setSelectedSlot(availability.slots[0]);
+    });
+  }, [studio]);
+
+  const submitBooking = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedSlot) return;
+
+    const nextBooking = await submitBookingRequest(studio.slug, {
+      roomId: selectedSlot.roomId,
+      date: selectedSlot.date,
+      startTime: selectedSlot.startTime,
+      durationHours: selectedSlot.durationHours,
+      guestName,
+      guestEmail,
+      shootType: "product",
+      message: shootNotes
+    });
+
+    setBooking(nextBooking);
+  };
 
   return (
     <main className="detail-shell">
@@ -300,6 +339,59 @@ const StudioDetail = ({ studio, isSaved, onBack, onSave }: StudioDetailProps) =>
               <li key={rule}>{rule}</li>
             ))}
           </ul>
+        </section>
+
+        <section className="detail-section booking-panel" aria-label="Booking request">
+          <div>
+            <p className="eyebrow">Hybrid booking</p>
+            <h2>Choose a time</h2>
+          </div>
+          <div className="slot-grid">
+            {slots.slice(0, 6).map((slot) => (
+              <button
+                aria-label={`${slot.startTime} ${slot.roomName} ${accessibleMoney(slot.price, slot.currency)}`}
+                className={`slot-button ${selectedSlot?.id === slot.id ? "slot-active" : ""}`}
+                key={slot.id}
+                onClick={() => setSelectedSlot(slot)}
+                type="button"
+              >
+                <span>{slot.startTime}</span>
+                <strong>{slot.roomName}</strong>
+                <small>{money(slot.price, slot.currency)}</small>
+              </button>
+            ))}
+          </div>
+
+          <form className="booking-form" onSubmit={submitBooking}>
+            <label>
+              Name
+              <input value={guestName} onChange={(event) => setGuestName(event.target.value)} required />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={guestEmail}
+                onChange={(event) => setGuestEmail(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Shoot notes
+              <textarea value={shootNotes} onChange={(event) => setShootNotes(event.target.value)} required />
+            </label>
+            <button className="request-button" type="submit">
+              Request booking
+            </button>
+          </form>
+
+          {booking && (
+            <p className="booking-status">
+              {booking.status === "awaiting_payment"
+                ? "Slot ready: continue to payment."
+                : "Request sent: waiting for owner approval."}
+            </p>
+          )}
         </section>
       </section>
 

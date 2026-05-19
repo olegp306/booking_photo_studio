@@ -1,12 +1,16 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import {
+  createBookingIntent,
   findStudioBySlug,
+  getAvailabilityForStudio,
   searchStudios,
   seedStudios,
   taxonomy,
   type AmenityId,
   type BookingMode,
+  type BookingIntent,
+  type BookingIntentRequest,
   type EquipmentId,
   type FeatureId,
   type ShootType,
@@ -21,6 +25,7 @@ const toArray = <T extends string>(value: string | string[] | undefined): T[] | 
 
 export const buildServer = () => {
   const app = Fastify({ logger: false });
+  const bookingIntents: BookingIntent[] = [];
 
   app.register(cors, {
     origin: true
@@ -71,6 +76,54 @@ export const buildServer = () => {
     }
 
     return { studio };
+  });
+
+  app.get<{
+    Params: { slug: string };
+    Querystring: { date?: string; durationHours?: string };
+  }>("/studios/:slug/availability", async (request, reply) => {
+    const studio = findStudioBySlug(seedStudios, request.params.slug);
+
+    if (!studio) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    const date = request.query.date ?? new Date().toISOString().slice(0, 10);
+    const durationHours = request.query.durationHours ? Number(request.query.durationHours) : 2;
+
+    return {
+      availability: getAvailabilityForStudio(studio, date, durationHours)
+    };
+  });
+
+  app.post<{
+    Body: BookingIntentRequest & { studioSlug: string };
+  }>("/booking-requests", async (request, reply) => {
+    const studio = findStudioBySlug(seedStudios, request.body.studioSlug);
+
+    if (!studio) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    try {
+      const booking = createBookingIntent(studio, request.body);
+      bookingIntents.push(booking);
+
+      return reply.code(201).send({
+        booking
+      });
+    } catch (error) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_REQUEST",
+        message: error instanceof Error ? error.message : "Booking request is invalid"
+      });
+    }
   });
 
   app.get("/taxonomy", async () => ({
