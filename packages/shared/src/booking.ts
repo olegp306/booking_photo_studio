@@ -2,6 +2,7 @@ import type {
   AvailabilitySlot,
   BookingIntent,
   BookingIntentRequest,
+  OwnerBookingDecision,
   Studio,
   StudioAvailability
 } from "./types";
@@ -76,5 +77,21 @@ export const createBookingIntent = (
     guestEmail: request.guestEmail,
     shootType: request.shootType,
     message: request.message
+  };
+};
+
+export const decideBookingIntent = (
+  booking: BookingIntent,
+  decision: OwnerBookingDecision,
+  ownerNote?: string
+): BookingIntent => {
+  if (booking.status !== "pending_owner_approval") {
+    throw new Error("Only pending owner approval bookings can be decided");
+  }
+
+  return {
+    ...booking,
+    status: decision === "approve" ? "awaiting_payment" : "declined",
+    ownerNote
   };
 };

@@ -1,11 +1,13 @@
 import {
   createBookingIntent,
+  decideBookingIntent,
   findStudioBySlug,
   getAvailabilityForStudio,
   searchStudios,
   seedStudios,
   type BookingIntent,
   type BookingIntentRequest,
+  type OwnerBookingDecision,
   type Studio,
   type StudioAvailability,
   type StudioSearchFilters
@@ -68,5 +70,41 @@ export const submitBookingRequest = async (
     const studio = findStudioBySlug(seedStudios, studioSlug);
     if (!studio) throw new Error("Studio was not found");
     return createBookingIntent(studio, request);
+  }
+};
+
+export const loadOwnerBookings = async (studioSlug?: string): Promise<BookingIntent[]> => {
+  const params = new URLSearchParams();
+  if (studioSlug) params.set("studioSlug", studioSlug);
+
+  try {
+    const response = await fetch(`${API_BASE}/owner/bookings?${params.toString()}`);
+    if (!response.ok) throw new Error("Failed to load owner bookings");
+    const payload = (await response.json()) as { bookings: BookingIntent[] };
+    return payload.bookings;
+  } catch {
+    return [];
+  }
+};
+
+export const decideOwnerBooking = async (
+  booking: BookingIntent,
+  decision: OwnerBookingDecision
+): Promise<BookingIntent> => {
+  try {
+    const response = await fetch(`${API_BASE}/owner/bookings/${booking.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        decision
+      })
+    });
+    if (!response.ok) throw new Error("Failed to update booking");
+    const payload = (await response.json()) as { booking: BookingIntent };
+    return payload.booking;
+  } catch {
+    return decideBookingIntent(booking, decision);
   }
 };

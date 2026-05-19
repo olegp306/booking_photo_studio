@@ -58,4 +58,26 @@ describe("App", () => {
 
     expect(await screen.findByText("Request sent: waiting for owner approval.")).toBeInTheDocument();
   });
+
+  it("shows owners incoming booking requests and approval action", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(await screen.findByRole("button", { name: "11:00 Product Corner CZK 1,400" }));
+    await user.type(screen.getByLabelText("Name"), "Marta Client");
+    await user.type(screen.getByLabelText("Email"), "marta@example.com");
+    await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await user.click(screen.getByRole("button", { name: "Request booking" }));
+    await screen.findByText("Request sent: waiting for owner approval.");
+
+    await user.click(screen.getByRole("button", { name: "Back to results" }));
+    await user.click(screen.getByRole("link", { name: "Host" }));
+
+    expect(await screen.findByRole("heading", { name: "Owner inbox" })).toBeInTheDocument();
+    expect(screen.getByText("Marta Client")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve Marta Client booking" }));
+
+    expect(await screen.findByText("Awaiting payment")).toBeInTheDocument();
+  });
 });

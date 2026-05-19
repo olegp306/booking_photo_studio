@@ -478,6 +478,121 @@ h2 {
   font-weight: 800;
 }
 
+.owner-shell {
+  background: #fffaf4;
+}
+
+.owner-hero {
+  padding-bottom: 22px;
+}
+
+.owner-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fffaf4;
+}
+
+.owner-summary span {
+  display: block;
+  margin-top: 3px;
+  color: #76685f;
+  font-size: 13px;
+}
+
+.owner-list {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.owner-request,
+.empty-state {
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.owner-request-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-request h2,
+.empty-state h2 {
+  margin-bottom: 0;
+}
+
+.owner-request p,
+.empty-state p {
+  color: #6e6259;
+  line-height: 1.45;
+}
+
+.owner-message {
+  border-left: 3px solid #eadfd2;
+  padding-left: 10px;
+}
+
+.status-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #f0e5d8;
+  color: #6a4630;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-pill.awaiting_payment,
+.status-pill.confirmed {
+  background: #e8f4ea;
+  color: #245a2f;
+}
+
+.status-pill.declined,
+.status-pill.cancelled {
+  background: #f7e2e4;
+  color: #8a2734;
+}
+
+.owner-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.owner-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 11px 12px;
+  font-weight: 800;
+}
+
+.approve-button {
+  border: 0;
+  background: #191714;
+  color: #fff;
+}
+
+.decline-button {
+  border: 1px solid #dccfc0;
+  background: #fff;
+  color: #6e6259;
+}
+
 .booking-bar {
   align-items: center;
   justify-content: space-between;

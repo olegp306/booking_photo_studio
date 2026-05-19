@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBookingIntent, getAvailabilityForStudio } from "./booking";
+import { createBookingIntent, decideBookingIntent, getAvailabilityForStudio } from "./booking";
 import { seedStudios } from "./seedStudios";
 
 const lumen = seedStudios[0];
@@ -73,5 +73,40 @@ describe("booking domain", () => {
         message: "Test"
       })
     ).toThrow("Room was not found");
+  });
+
+  it("moves approved request bookings into payment collection", () => {
+    const intent = createBookingIntent(lumen, {
+      roomId: "lumen-product",
+      date: "2026-06-12",
+      startTime: "11:00",
+      durationHours: 2,
+      guestName: "Marta Client",
+      guestEmail: "marta@example.com",
+      shootType: "product",
+      message: "Need product table"
+    });
+
+    const approved = decideBookingIntent(intent, "approve");
+
+    expect(approved.status).toBe("awaiting_payment");
+  });
+
+  it("declines request bookings with an owner note", () => {
+    const intent = createBookingIntent(lumen, {
+      roomId: "lumen-product",
+      date: "2026-06-12",
+      startTime: "11:00",
+      durationHours: 2,
+      guestName: "Marta Client",
+      guestEmail: "marta@example.com",
+      shootType: "product",
+      message: "Need product table"
+    });
+
+    const declined = decideBookingIntent(intent, "decline", "Room is already blocked for a campaign.");
+
+    expect(declined.status).toBe("declined");
+    expect(declined.ownerNote).toBe("Room is already blocked for a campaign.");
   });
 });

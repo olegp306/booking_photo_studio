@@ -119,6 +119,8 @@ export type BookingStatus =
   | "cancelled"
   | "completed";
 
+export type OwnerBookingDecision = "approve" | "decline";
+
 export interface AvailabilitySlot {
   id: string;
   studioSlug: string;
@@ -167,4 +169,5 @@ export interface BookingIntent {
   guestEmail: string;
   shootType: ShootType;
   message: string;
+  ownerNote?: string;
 }

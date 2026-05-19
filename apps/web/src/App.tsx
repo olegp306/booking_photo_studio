@@ -1,15 +1,18 @@
 import {
   CalendarDays,
+  Check,
   ChevronLeft,
   Heart,
   Home,
+  Inbox,
   MapPin,
   Search,
   Share2,
   SlidersHorizontal,
   Sparkles,
   Star,
-  UserRound
+  UserRound,
+  X
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -24,7 +27,7 @@ import {
   type Studio,
   type StudioSearchFilters
 } from "@studio-market/shared";
-import { loadAvailability, loadStudios, submitBookingRequest } from "./api";
+import { decideOwnerBooking, loadAvailability, loadOwnerBookings, loadStudios, submitBookingRequest } from "./api";
 
 const money = (amount: number, currency: string) =>
   new Intl.NumberFormat("en-US", {
@@ -40,6 +43,7 @@ const accessibleMoney = (amount: number, currency: string) =>
 
 const selectedFeatures: FeatureId[] = ["natural-light", "cyclorama", "blackout", "bedroom-set"];
 const shootTypes: ShootType[] = ["portrait", "fashion", "maternity", "product", "video", "content"];
+type AppView = "explore" | "host";
 
 export const App = () => {
   const [studios, setStudios] = useState<Studio[]>([]);
@@ -47,6 +51,8 @@ export const App = () => {
   const [activeFeature, setActiveFeature] = useState<FeatureId | undefined>();
   const [selectedStudio, setSelectedStudio] = useState<Studio | undefined>();
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<AppView>("explore");
+  const [ownerBookings, setOwnerBookings] = useState<BookingIntent[]>([]);
 
   const filters: StudioSearchFilters = useMemo(
     () => ({
@@ -60,6 +66,18 @@ export const App = () => {
   useEffect(() => {
     loadStudios(filters).then(setStudios);
   }, [filters]);
+
+  useEffect(() => {
+    if (view === "host") {
+      loadOwnerBookings().then((bookings) => {
+        setOwnerBookings((current) => {
+          const bookingMap = new Map(current.map((booking) => [booking.id, booking]));
+          bookings.forEach((booking) => bookingMap.set(booking.id, booking));
+          return Array.from(bookingMap.values());
+        });
+      });
+    }
+  }, [view]);
 
   const toggleSaved = (slug: string) => {
     setSaved((current) => {
@@ -76,7 +94,23 @@ export const App = () => {
         studio={selectedStudio}
         isSaved={saved.has(selectedStudio.slug)}
         onBack={() => setSelectedStudio(undefined)}
+        onBookingCreated={(booking) =>
+          setOwnerBookings((current) => [booking, ...current.filter((item) => item.id !== booking.id)])
+        }
         onSave={() => toggleSaved(selectedStudio.slug)}
+      />
+    );
+  }
+
+  if (view === "host") {
+    return (
+      <OwnerDashboard
+        bookings={ownerBookings}
+        onBackToExplore={() => setView("explore")}
+        onDecideBooking={async (booking, decision) => {
+          const updated = await decideOwnerBooking(booking, decision);
+          setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        }}
       />
     );
   }
@@ -154,7 +188,7 @@ export const App = () => {
       </section>
 
       <nav className="bottom-nav" aria-label="Primary navigation">
-        <a className="active" href="#explore">
+        <a className="active" href="#explore" onClick={() => setView("explore")}>
           <Search size={19} />
           Explore
         </a>
@@ -166,7 +200,7 @@ export const App = () => {
           <CalendarDays size={19} />
           Bookings
         </a>
-        <a href="#profile">
+        <a href="#profile" onClick={() => setView("host")}>
           <Home size={19} />
           Host
         </a>
@@ -221,10 +255,11 @@ interface StudioDetailProps {
   studio: Studio;
   isSaved: boolean;
   onBack: () => void;
+  onBookingCreated: (booking: BookingIntent) => void;
   onSave: () => void;
 }
 
-const StudioDetail = ({ studio, isSaved, onBack, onSave }: StudioDetailProps) => {
+const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: StudioDetailProps) => {
   const hero = studio.images.find((image) => image.kind === "hero") ?? studio.images[0];
   const visibleEquipment = studio.equipmentIds.slice(0, 5);
   const visibleAmenities = studio.amenityIds.slice(0, 5);
@@ -259,6 +294,7 @@ const StudioDetail = ({ studio, isSaved, onBack, onSave }: StudioDetailProps) =>
     });
 
     setBooking(nextBooking);
+    onBookingCreated(nextBooking);
   };
 
   return (
@@ -405,3 +441,111 @@ const StudioDetail = ({ studio, isSaved, onBack, onSave }: StudioDetailProps) =>
     </main>
   );
 };
+
+interface OwnerDashboardProps {
+  bookings: BookingIntent[];
+  onBackToExplore: () => void;
+  onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
+}
+
+const statusLabel = (status: BookingIntent["status"]) => {
+  const labels: Record<BookingIntent["status"], string> = {
+    pending_owner_approval: "Needs review",
+    awaiting_payment: "Awaiting payment",
+    confirmed: "Confirmed",
+    declined: "Declined",
+    cancelled: "Cancelled",
+    completed: "Completed"
+  };
+
+  return labels[status];
+};
+
+const OwnerDashboard = ({ bookings, onBackToExplore, onDecideBooking }: OwnerDashboardProps) => (
+  <main className="app-shell owner-shell">
+    <section className="hero-band owner-hero">
+      <div className="top-bar">
+        <div>
+          <p className="eyebrow">Studio owners</p>
+          <h1>Owner inbox</h1>
+        </div>
+        <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
+          <Search size={20} />
+        </button>
+      </div>
+      <div className="owner-summary">
+        <Inbox size={20} />
+        <div>
+          <strong>{bookings.length} requests</strong>
+          <span>Review holds before payment collection.</span>
+        </div>
+      </div>
+    </section>
+
+    <section className="owner-list" aria-label="Owner booking requests">
+      {bookings.length === 0 ? (
+        <div className="empty-state">
+          <h2>No requests yet</h2>
+          <p>New booking requests will appear here after a photographer or client asks for a studio time.</p>
+        </div>
+      ) : (
+        bookings.map((booking) => (
+          <article className="owner-request" key={booking.id}>
+            <div className="owner-request-head">
+              <div>
+                <p className="eyebrow">{booking.studioName}</p>
+                <h2>{booking.guestName}</h2>
+              </div>
+              <span className={`status-pill ${booking.status}`}>{statusLabel(booking.status)}</span>
+            </div>
+            <p>
+              {booking.roomName} · {booking.date} at {booking.startTime} · {booking.durationHours}h
+            </p>
+            <p className="owner-message">{booking.message}</p>
+            <strong>{money(booking.totalPrice, booking.currency)}</strong>
+
+            {booking.status === "pending_owner_approval" && (
+              <div className="owner-actions">
+                <button
+                  className="approve-button"
+                  aria-label={`Approve ${booking.guestName} booking`}
+                  onClick={() => onDecideBooking(booking, "approve")}
+                >
+                  <Check size={17} />
+                  Approve
+                </button>
+                <button
+                  className="decline-button"
+                  aria-label={`Decline ${booking.guestName} booking`}
+                  onClick={() => onDecideBooking(booking, "decline")}
+                >
+                  <X size={17} />
+                  Decline
+                </button>
+              </div>
+            )}
+          </article>
+        ))
+      )}
+    </section>
+
+    <nav className="bottom-nav" aria-label="Primary navigation">
+      <a href="#explore" onClick={onBackToExplore}>
+        <Search size={19} />
+        Explore
+      </a>
+      <a href="#saved">
+        <Heart size={19} />
+        Saved
+      </a>
+      <a href="#bookings">
+        <CalendarDays size={19} />
+        Bookings
+      </a>
+      <a className="active" href="#profile">
+        <Home size={19} />
+        Host
+      </a>
+    </nav>
+  </main>
+);

@@ -2,6 +2,7 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 import {
   createBookingIntent,
+  decideBookingIntent,
   findStudioBySlug,
   getAvailabilityForStudio,
   searchStudios,
@@ -13,6 +14,7 @@ import {
   type BookingIntentRequest,
   type EquipmentId,
   type FeatureId,
+  type OwnerBookingDecision,
   type ShootType,
   type StudioSearchFilters
 } from "@studio-market/shared";
@@ -122,6 +124,52 @@ export const buildServer = () => {
       return reply.code(400).send({
         error: "INVALID_BOOKING_REQUEST",
         message: error instanceof Error ? error.message : "Booking request is invalid"
+      });
+    }
+  });
+
+  app.get<{
+    Querystring: {
+      studioSlug?: string;
+    };
+  }>("/owner/bookings", async (request) => {
+    const bookings = request.query.studioSlug
+      ? bookingIntents.filter((booking) => booking.studioSlug === request.query.studioSlug)
+      : bookingIntents;
+
+    return {
+      bookings
+    };
+  });
+
+  app.patch<{
+    Params: { bookingId: string };
+    Body: { decision: OwnerBookingDecision; ownerNote?: string };
+  }>("/owner/bookings/:bookingId", async (request, reply) => {
+    const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
+
+    if (bookingIndex === -1) {
+      return reply.code(404).send({
+        error: "BOOKING_NOT_FOUND",
+        message: "Booking request was not found"
+      });
+    }
+
+    try {
+      const booking = decideBookingIntent(
+        bookingIntents[bookingIndex],
+        request.body.decision,
+        request.body.ownerNote
+      );
+      bookingIntents[bookingIndex] = booking;
+
+      return {
+        booking
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_DECISION",
+        message: error instanceof Error ? error.message : "Booking decision is invalid"
       });
     }
   });

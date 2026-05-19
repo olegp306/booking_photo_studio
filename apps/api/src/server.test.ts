@@ -93,4 +93,42 @@ describe("studio API", () => {
       })
     );
   });
+
+  it("lets owners review and approve incoming booking requests", async () => {
+    const server = buildServer();
+    const created = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-product",
+        date: "2026-06-12",
+        startTime: "11:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        shootType: "product",
+        message: "Need product table"
+      }
+    });
+    const bookingId = created.json().booking.id;
+
+    const inbox = await server.inject({
+      method: "GET",
+      url: "/owner/bookings?studioSlug=studio-lumen-karlin"
+    });
+    expect(inbox.statusCode).toBe(200);
+    expect(inbox.json().bookings).toHaveLength(1);
+
+    const approved = await server.inject({
+      method: "PATCH",
+      url: `/owner/bookings/${bookingId}`,
+      payload: {
+        decision: "approve"
+      }
+    });
+
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json().booking.status).toBe("awaiting_payment");
+  });
 });
