@@ -13,6 +13,112 @@ describe("studio API", () => {
     });
   });
 
+  it("reports launch readiness without exposing secrets", async () => {
+    const server = buildServer({
+      config: {
+        openaiApiKey: "",
+        telegramBotToken: "",
+        publicAppUrl: "",
+        stripeSecretKey: ""
+      }
+    });
+    const response = await server.inject({ method: "GET", url: "/readiness" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        ok: true,
+        envFile: ".env.local",
+        services: expect.objectContaining({
+          openai: expect.objectContaining({
+            configured: false,
+            env: "OPENAI_API_KEY"
+          }),
+          telegram: expect.objectContaining({
+            configured: false,
+            env: "TELEGRAM_BOT_TOKEN"
+          }),
+          publicAppUrl: expect.objectContaining({
+            configured: false,
+            env: "PUBLIC_APP_URL"
+          }),
+          stripe: expect.objectContaining({
+            configured: false,
+            env: "STRIPE_SECRET_KEY"
+          })
+        }),
+        nextSteps: expect.arrayContaining([
+          "Fill OPENAI_API_KEY to switch listing drafts from local fallback to AI generation.",
+          "Fill TELEGRAM_BOT_TOKEN before wiring the owner onboarding bot."
+        ])
+      })
+    );
+    expect(JSON.stringify(response.json())).not.toContain("sk-");
+  });
+
+  it("creates listing drafts through the AI endpoint with a local fallback", async () => {
+    const server = buildServer({
+      config: {
+        openaiApiKey: ""
+      }
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: "/ai/listing-draft",
+      payload: {
+        transcript:
+          "Soft daylight studio for fashion and product shoots with cyclorama, softboxes, c-stands, makeup station, dressing room, wifi, and product table."
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        mode: "local-fallback",
+        draft: expect.objectContaining({
+          tagline: "Soft daylight studio for fashion and product shoots.",
+          shootTypes: ["fashion", "product"],
+          featureIds: expect.arrayContaining(["natural-light", "cyclorama"]),
+          equipmentIds: expect.arrayContaining(["softboxes", "c-stands"]),
+          amenityIds: expect.arrayContaining(["makeup-station", "dressing-room", "wifi"])
+        })
+      })
+    );
+  });
+
+  it("accepts Telegram owner bot listing draft webhooks", async () => {
+    const server = buildServer({
+      config: {
+        telegramBotToken: "",
+        publicAppUrl: "https://studio.example.com"
+      }
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/listing-draft",
+      payload: {
+        message: {
+          chat: { id: 123 },
+          text: "Soft daylight studio for fashion shoots with cyclorama and softboxes"
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        ok: true,
+        mode: "local-fallback",
+        reply: expect.stringContaining("Listing draft ready"),
+        webAppUrl: "https://studio.example.com",
+        draft: expect.objectContaining({
+          shootTypes: ["fashion"],
+          featureIds: expect.arrayContaining(["natural-light", "cyclorama"])
+        })
+      })
+    );
+  });
+
   it("searches studios by equipment", async () => {
     const server = buildServer();
     const response = await server.inject({

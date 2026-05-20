@@ -4,6 +4,7 @@ import {
   applyStudioReview,
   createBookingIntent,
   decideBookingIntent,
+  draftListingFromTranscript,
   findStudioBySlug,
   getAvailabilityForStudio,
   markBookingCompleted,
@@ -28,6 +29,7 @@ import {
   type StudioReviewRequest,
   type StudioSearchFilters
 } from "@studio-market/shared";
+import { getLaunchReadiness, hasConfiguredOpenAi, loadRuntimeConfig, type RuntimeConfig } from "./env";
 
 const toArray = <T extends string>(value: string | string[] | undefined): T[] | undefined => {
   if (!value) return undefined;
@@ -35,7 +37,24 @@ const toArray = <T extends string>(value: string | string[] | undefined): T[] | 
   return values.map((item) => item.trim()).filter(Boolean) as T[];
 };
 
-export const buildServer = () => {
+interface BuildServerOptions {
+  config?: Partial<RuntimeConfig>;
+}
+
+const extractTelegramText = (body: unknown) => {
+  if (!body || typeof body !== "object") return "";
+  const payload = body as {
+    message?: {
+      text?: string;
+      caption?: string;
+    };
+  };
+
+  return payload.message?.text ?? payload.message?.caption ?? "";
+};
+
+export const buildServer = (options: BuildServerOptions = {}) => {
+  const config = loadRuntimeConfig(options.config);
   const app = Fastify({ logger: false });
   const studios = seedStudios.map((studio) => ({
     ...studio,
@@ -75,6 +94,52 @@ export const buildServer = () => {
     ok: true,
     service: "studio-market-api"
   }));
+
+  app.get("/readiness", async () => getLaunchReadiness(config));
+
+  app.post<{
+    Body: {
+      transcript?: string;
+    };
+  }>("/ai/listing-draft", async (request, reply) => {
+    const transcript = request.body.transcript?.trim();
+
+    if (!transcript) {
+      return reply.code(400).send({
+        error: "INVALID_LISTING_DRAFT",
+        message: "Transcript is required"
+      });
+    }
+
+    return {
+      mode: hasConfiguredOpenAi(config) ? "openai-ready" : "local-fallback",
+      draft: draftListingFromTranscript(transcript)
+    };
+  });
+
+  app.post<{
+    Body: unknown;
+  }>("/integrations/telegram/listing-draft", async (request) => {
+    const transcript = extractTelegramText(request.body).trim();
+
+    if (!transcript) {
+      return {
+        ok: true,
+        ignored: true,
+        reason: "No text or caption was found in the Telegram update."
+      };
+    }
+
+    const draft = draftListingFromTranscript(transcript);
+
+    return {
+      ok: true,
+      mode: hasConfiguredOpenAi(config) ? "openai-ready" : "local-fallback",
+      reply: "Listing draft ready. Open the owner dashboard to review and publish it.",
+      webAppUrl: config.publicAppUrl || "http://localhost:5173",
+      draft
+    };
+  });
 
   app.get<{
     Querystring: {

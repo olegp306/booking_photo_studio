@@ -2,6 +2,7 @@ import {
   applyStudioReview,
   createBookingIntent,
   decideBookingIntent,
+  draftListingFromTranscript,
   findStudioBySlug,
   getAvailabilityForStudio,
   markBookingCompleted,
@@ -11,6 +12,7 @@ import {
   type AvailabilitySlot,
   type BookingIntent,
   type BookingIntentRequest,
+  type ListingDraft,
   type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
@@ -24,6 +26,28 @@ import {
 } from "@studio-market/shared";
 
 const API_BASE = "/api";
+export type AiDraftMode = "local-fallback" | "openai-ready";
+
+export interface LaunchServiceReadiness {
+  configured: boolean;
+  env: string;
+  label: string;
+  missingLabel: string;
+  readyLabel: string;
+}
+
+export interface LaunchReadiness {
+  ok: true;
+  envFile: string;
+  services: {
+    openai: LaunchServiceReadiness;
+    telegram: LaunchServiceReadiness;
+    publicAppUrl: LaunchServiceReadiness;
+    stripe: LaunchServiceReadiness;
+  };
+  nextSteps: string[];
+}
+
 const localShortlists = new Map<string, SharedShortlist>();
 const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
 let localShortlistCount = 0;
@@ -41,6 +65,80 @@ const isOpenOverrideSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlo
   block.roomId === slot.roomId &&
   block.date === slot.date &&
   block.startTime === slot.startTime;
+
+export const fallbackLaunchReadiness: LaunchReadiness = {
+  ok: true,
+  envFile: ".env.local",
+  services: {
+    openai: {
+      configured: false,
+      env: "OPENAI_API_KEY",
+      label: "OpenAI listing assistant",
+      missingLabel: "Missing OPENAI_API_KEY",
+      readyLabel: "OPENAI_API_KEY configured"
+    },
+    telegram: {
+      configured: false,
+      env: "TELEGRAM_BOT_TOKEN",
+      label: "Telegram owner bot",
+      missingLabel: "Missing TELEGRAM_BOT_TOKEN",
+      readyLabel: "TELEGRAM_BOT_TOKEN configured"
+    },
+    publicAppUrl: {
+      configured: false,
+      env: "PUBLIC_APP_URL",
+      label: "Public app URL",
+      missingLabel: "Missing PUBLIC_APP_URL",
+      readyLabel: "PUBLIC_APP_URL configured"
+    },
+    stripe: {
+      configured: false,
+      env: "STRIPE_SECRET_KEY",
+      label: "Stripe payments",
+      missingLabel: "Missing STRIPE_SECRET_KEY",
+      readyLabel: "STRIPE_SECRET_KEY configured"
+    }
+  },
+  nextSteps: [
+    "Fill OPENAI_API_KEY to switch listing drafts from local fallback to AI generation.",
+    "Fill TELEGRAM_BOT_TOKEN before wiring the owner onboarding bot.",
+    "Fill PUBLIC_APP_URL so Telegram links can open the web app.",
+    "Fill STRIPE_SECRET_KEY before replacing simulated payment capture."
+  ]
+};
+
+export const loadLaunchReadiness = async (): Promise<LaunchReadiness> => {
+  try {
+    const response = await fetch(`${API_BASE}/readiness`);
+    if (!response.ok) throw new Error("Failed to load launch readiness");
+    return (await response.json()) as LaunchReadiness;
+  } catch {
+    return fallbackLaunchReadiness;
+  }
+};
+
+export const generateListingDraft = async (
+  transcript: string
+): Promise<{ mode: AiDraftMode; draft: ListingDraft }> => {
+  try {
+    const response = await fetch(`${API_BASE}/ai/listing-draft`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        transcript
+      })
+    });
+    if (!response.ok) throw new Error("Failed to generate listing draft");
+    return (await response.json()) as { mode: AiDraftMode; draft: ListingDraft };
+  } catch {
+    return {
+      mode: "local-fallback",
+      draft: draftListingFromTranscript(transcript)
+    };
+  }
+};
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {
   const params = new URLSearchParams();

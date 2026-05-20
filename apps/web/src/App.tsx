@@ -18,7 +18,6 @@ import {
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   amenityLabels,
-  draftListingFromTranscript,
   equipmentLabels,
   featureLabels,
   shootTypeLabels,
@@ -45,8 +44,10 @@ import {
   createOwnerAvailabilityBlock,
   createSharedShortlist,
   decideOwnerBooking,
+  generateListingDraft,
   loadAvailability,
   loadCustomerBookings,
+  loadLaunchReadiness,
   loadOwnerAvailabilityBlocks,
   loadOwnerBookings,
   loadSharedShortlist,
@@ -55,7 +56,8 @@ import {
   submitBookingReview,
   submitBookingRequest,
   updateOwnerListing,
-  updateSharedShortlist
+  updateSharedShortlist,
+  type LaunchReadiness
 } from "./api";
 
 const money = (amount: number, currency: string) =>
@@ -1237,7 +1239,39 @@ const OwnerDashboard = ({
   onReleaseAvailability,
   onUpdateListing
 }: OwnerDashboardProps) => {
-  const [activeTab, setActiveTab] = useState<"requests" | "calendar" | "listing">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "calendar" | "listing" | "launch">("requests");
+  const ownerTitle =
+    activeTab === "requests"
+      ? "Owner inbox"
+      : activeTab === "calendar"
+        ? "Calendar"
+        : activeTab === "listing"
+          ? "Manage listing"
+          : "Launch readiness";
+  const ownerSummary =
+    activeTab === "requests"
+      ? {
+          icon: <Inbox size={20} />,
+          title: `${bookings.length} requests`,
+          text: "Review holds before payment collection."
+        }
+      : activeTab === "calendar"
+        ? {
+            icon: <CalendarDays size={20} />,
+            title: "Availability controls",
+            text: "Block maintenance, private shoots, and owner holds."
+          }
+        : activeTab === "listing"
+          ? {
+              icon: <Home size={20} />,
+              title: studio?.name ?? "Studio listing",
+              text: "Keep the public studio profile ready for photographers and clients."
+            }
+          : {
+              icon: <Sparkles size={20} />,
+              title: "Integrations setup",
+              text: "Check AI, Telegram, public links, and payment keys before live testing."
+            };
 
   return (
     <main className="app-shell owner-shell">
@@ -1245,31 +1279,17 @@ const OwnerDashboard = ({
         <div className="top-bar">
           <div>
             <p className="eyebrow">Studio owners</p>
-            <h1>
-              {activeTab === "requests" ? "Owner inbox" : activeTab === "calendar" ? "Calendar" : "Manage listing"}
-            </h1>
+            <h1>{ownerTitle}</h1>
           </div>
           <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
             <Search size={20} />
           </button>
         </div>
         <div className="owner-summary">
-          {activeTab === "requests" ? <Inbox size={20} /> : activeTab === "calendar" ? <CalendarDays size={20} /> : <Home size={20} />}
+          {ownerSummary.icon}
           <div>
-            <strong>
-              {activeTab === "requests"
-                ? `${bookings.length} requests`
-                : activeTab === "calendar"
-                  ? "Availability controls"
-                  : studio?.name ?? "Studio listing"}
-            </strong>
-            <span>
-              {activeTab === "requests"
-                ? "Review holds before payment collection."
-                : activeTab === "calendar"
-                  ? "Block maintenance, private shoots, and owner holds."
-                : "Keep the public studio profile ready for photographers and clients."}
-            </span>
+            <strong>{ownerSummary.title}</strong>
+            <span>{ownerSummary.text}</span>
           </div>
         </div>
         <div className="owner-tabs" role="group" aria-label="Owner dashboard sections">
@@ -1294,6 +1314,13 @@ const OwnerDashboard = ({
           >
             Listing
           </button>
+          <button
+            className={activeTab === "launch" ? "active" : ""}
+            onClick={() => setActiveTab("launch")}
+            type="button"
+          >
+            Launch
+          </button>
         </div>
       </section>
 
@@ -1312,6 +1339,8 @@ const OwnerDashboard = ({
           onLoadAvailabilityBlocks={loadOwnerAvailabilityBlocks}
           onReleaseAvailability={onReleaseAvailability}
         />
+      ) : activeTab === "launch" ? (
+        <OwnerLaunchReadiness />
       ) : studio ? (
         <OwnerListingEditor studio={studio} onUpdateListing={onUpdateListing} />
       ) : (
@@ -1342,6 +1371,67 @@ const OwnerDashboard = ({
         </a>
       </nav>
     </main>
+  );
+};
+
+const OwnerLaunchReadiness = () => {
+  const [readiness, setReadiness] = useState<LaunchReadiness>();
+
+  useEffect(() => {
+    loadLaunchReadiness().then(setReadiness);
+  }, []);
+
+  const services = readiness
+    ? [readiness.services.openai, readiness.services.telegram, readiness.services.publicAppUrl, readiness.services.stripe]
+    : [];
+
+  return (
+    <section className="owner-list launch-readiness" aria-label="Launch readiness">
+      <article className="launch-readiness-hero">
+        <div>
+          <p className="eyebrow">Test setup</p>
+          <h2>Launch readiness</h2>
+          <p>
+            Use this panel before a live test: it checks whether AI drafts, Telegram onboarding links, public web links,
+            and payment keys are present without showing secret values.
+          </p>
+        </div>
+        <span className="status-pill">{readiness?.envFile ?? ".env.local"}</span>
+      </article>
+
+      <div className="launch-service-grid">
+        {services.map((service) => (
+          <article className="launch-service-card" key={service.env}>
+            <div>
+              <h3>{service.label}</h3>
+              <span className={`status-pill ${service.configured ? "confirmed" : "cancelled"}`}>
+                {service.configured ? service.readyLabel : service.missingLabel}
+              </span>
+            </div>
+            <p>{service.configured ? "Ready for the next integration step." : `Add ${service.env} in the env file.`}</p>
+          </article>
+        ))}
+      </div>
+
+      <article className="listing-status-panel">
+        <div>
+          <p className="eyebrow">Next test loop</p>
+          <h2>Owner and buyer flows</h2>
+          <p>
+            The listing editor can already generate structured fields from text, save studio changes, submit the listing
+            for review, and show the result in public search/detail pages.
+          </p>
+        </div>
+        <div className="launch-next-steps">
+          {(readiness?.nextSteps.length ? readiness.nextSteps : ["All local launch keys are configured."]).map((step) => (
+            <span key={step}>
+              <Check size={15} />
+              {step}
+            </span>
+          ))}
+        </div>
+      </article>
+    </section>
   );
 };
 
@@ -1764,6 +1854,7 @@ const readMediaFile = (file: File) =>
 
 const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps) => {
   const [aiDraft, setAiDraft] = useState("");
+  const [aiDraftStatus, setAiDraftStatus] = useState("");
   const [tagline, setTagline] = useState(studio.tagline);
   const [description, setDescription] = useState(studio.description);
   const [priceFrom, setPriceFrom] = useState(String(studio.priceFrom));
@@ -1806,8 +1897,8 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setRules(studio.rules.join("\n"));
   }, [studio]);
 
-  const generateDraft = () => {
-    const draft = draftListingFromTranscript(aiDraft);
+  const generateDraft = async () => {
+    const { draft, mode } = await generateListingDraft(aiDraft);
     setTagline(draft.tagline);
     setDescription(draft.description);
     if (draft.shootTypes.length) setShootTypes(draft.shootTypes);
@@ -1815,6 +1906,11 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     if (draft.equipmentIds.length) setEquipmentIds(draft.equipmentIds);
     if (draft.amenityIds.length) setAmenityIds(draft.amenityIds);
     if (draft.rules.length) setRules(draft.rules.join("\n"));
+    setAiDraftStatus(
+      mode === "local-fallback"
+        ? "Draft generated with local fallback. Add OPENAI_API_KEY to use live AI."
+        : "Draft generated through the AI endpoint."
+    );
   };
 
   const toggleShootType = (shootType: ShootType) => {
@@ -2062,6 +2158,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
         <button className="request-button" onClick={generateDraft} type="button">
           Generate listing draft
         </button>
+        {aiDraftStatus && <p className="booking-status">{aiDraftStatus}</p>}
       </article>
 
       <form className="booking-form listing-form" onSubmit={submitListing}>

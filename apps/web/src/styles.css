@@ -649,7 +649,7 @@ h2 {
 
 .owner-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   margin-top: 14px;
   border: 1px solid #eadfd2;
@@ -1091,6 +1091,73 @@ h2 {
   font-weight: 500;
   padding: 12px;
   resize: vertical;
+}
+
+.launch-readiness {
+  gap: 14px;
+}
+
+.launch-readiness-hero,
+.launch-service-card {
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.launch-readiness-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.launch-readiness-hero h2 {
+  font-size: 22px;
+}
+
+.launch-readiness-hero p,
+.launch-service-card p {
+  color: #6e6259;
+  line-height: 1.4;
+}
+
+.launch-service-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.launch-service-card {
+  display: grid;
+  gap: 10px;
+}
+
+.launch-service-card > div {
+  display: grid;
+  gap: 8px;
+}
+
+.launch-service-card h3 {
+  font-size: 15px;
+}
+
+.launch-next-steps {
+  display: grid;
+  gap: 8px;
+}
+
+.launch-next-steps span {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  background: #fffaf4;
+  color: #5d5149;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .detected-filters {

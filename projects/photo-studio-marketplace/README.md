@@ -41,6 +41,14 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Review counts surfaced on studio cards and detail pages.
 - Booking message threads shared between customers and studio owners.
 - Receipt download preparation action from customer bookings.
+- Launch readiness panel for OpenAI, Telegram owner bot, public app URL, and Stripe keys.
+- API readiness endpoint plus AI listing draft and Telegram webhook stubs with local fallback behavior.
+
+## Local Launch Env
+
+- Fill local secrets in `../../.env.local`; the committed template is `../../.env.example`.
+- Required for the next live integration pass: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `PUBLIC_APP_URL`.
+- Optional until production payments are wired: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_SECRET`, and `OPENAI_LISTING_MODEL`.
 
 ## Project Docs
 
@@ -52,11 +60,12 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
-3. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
+3. Wire the Telegram owner onboarding bot to the listing draft endpoint and public web app links.
 4. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
-5. Connect the AI listing assistant to voice input and OpenAI so owners can generate structured listings from spoken notes.
+5. Connect the AI listing assistant to OpenAI so owners can generate structured listings from text and later voice notes.
 6. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
 7. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
 8. Add authentication and durable database storage for shared shortlists, comments, and decisions.
-9. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
-10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.
+9. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
+10. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
+11. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

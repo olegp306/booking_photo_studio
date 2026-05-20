@@ -605,13 +605,30 @@ describe("App", () => {
     );
     await user.click(screen.getByRole("button", { name: "Generate listing draft" }));
 
-    expect(screen.getByDisplayValue("Soft daylight studio for fashion and product shoots.")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Soft daylight studio for fashion and product shoots.")).toBeInTheDocument();
+    expect(screen.getByText("Draft generated with local fallback. Add OPENAI_API_KEY to use live AI.")).toBeInTheDocument();
     const detectedFilters = within(screen.getByLabelText("Detected listing filters"));
     expect(detectedFilters.getByText("Fashion")).toBeInTheDocument();
     expect(detectedFilters.getByText("Product")).toBeInTheDocument();
     expect(detectedFilters.getByText("Cyclorama")).toBeInTheDocument();
     expect(detectedFilters.getByText("Softboxes")).toBeInTheDocument();
     expect(detectedFilters.getByText("Makeup station")).toBeInTheDocument();
+  });
+
+  it("shows launch readiness for AI, Telegram, and payments", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+
+    expect((await screen.findAllByRole("heading", { name: "Launch readiness" })).length).toBeGreaterThan(0);
+    expect(screen.getByText(".env.local")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI listing assistant")).toBeInTheDocument();
+    expect(screen.getByText("Telegram owner bot")).toBeInTheDocument();
+    expect(screen.getByText("Stripe payments")).toBeInTheDocument();
+    expect(screen.getByText("Missing OPENAI_API_KEY")).toBeInTheDocument();
+    expect(screen.getByText("Missing TELEGRAM_BOT_TOKEN")).toBeInTheDocument();
   });
 
   it("lets owners manually refine AI-detected listing filters", async () => {
