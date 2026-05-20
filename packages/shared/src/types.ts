@@ -120,6 +120,20 @@ export type BookingStatus =
   | "completed";
 
 export type OwnerBookingDecision = "approve" | "decline";
+export type ShortlistDecision = "favourite" | "backup" | "rejected";
+
+export interface SharedShortlistItem {
+  studioSlug: string;
+  decision?: ShortlistDecision;
+  note?: string;
+}
+
+export interface SharedShortlist {
+  id: string;
+  studioSlugs: string[];
+  items: SharedShortlistItem[];
+  createdAt: string;
+}
 
 export interface AvailabilitySlot {
   id: string;

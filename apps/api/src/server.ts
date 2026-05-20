@@ -16,6 +16,8 @@ import {
   type FeatureId,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
+  type SharedShortlist,
+  type SharedShortlistItem,
   type ShootType,
   type StudioSearchFilters
 } from "@studio-market/shared";
@@ -40,6 +42,7 @@ export const buildServer = () => {
     rules: [...studio.rules]
   }));
   const bookingIntents: BookingIntent[] = [];
+  const shortlists: SharedShortlist[] = [];
 
   app.register(cors, {
     origin: true
@@ -244,6 +247,61 @@ export const buildServer = () => {
   app.get("/taxonomy", async () => ({
     taxonomy
   }));
+
+  app.post<{
+    Body: {
+      studioSlugs: string[];
+      items?: SharedShortlistItem[];
+    };
+  }>("/shortlists", async (request, reply) => {
+    const studioSlugs = Array.from(new Set(request.body.studioSlugs ?? []));
+
+    if (!studioSlugs.length) {
+      return reply.code(400).send({
+        error: "INVALID_SHORTLIST",
+        message: "Shortlist must include at least one studio"
+      });
+    }
+
+    const missingSlug = studioSlugs.find((slug) => !findStudioBySlug(studios, slug));
+    if (missingSlug) {
+      return reply.code(400).send({
+        error: "INVALID_SHORTLIST",
+        message: `Studio ${missingSlug} was not found`
+      });
+    }
+
+    const items = studioSlugs.map((studioSlug) => ({
+      studioSlug,
+      ...request.body.items?.find((item) => item.studioSlug === studioSlug)
+    }));
+    const shortlist: SharedShortlist = {
+      id: `shortlist-${shortlists.length + 1}`,
+      studioSlugs,
+      items,
+      createdAt: new Date().toISOString()
+    };
+    shortlists.push(shortlist);
+
+    return reply.code(201).send({
+      shortlist
+    });
+  });
+
+  app.get<{ Params: { shortlistId: string } }>("/shortlists/:shortlistId", async (request, reply) => {
+    const shortlist = shortlists.find((item) => item.id === request.params.shortlistId);
+
+    if (!shortlist) {
+      return reply.code(404).send({
+        error: "SHORTLIST_NOT_FOUND",
+        message: "Shortlist was not found"
+      });
+    }
+
+    return {
+      shortlist
+    };
+  });
 
   return app;
 };

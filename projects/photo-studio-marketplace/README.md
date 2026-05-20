@@ -18,6 +18,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Shareable studio detail links for client-photographer handoff.
 - Shareable saved shortlists for sending several studio options at once.
 - Collaborative shortlist decisions and notes for client-photographer review.
+- Persisted shared shortlist resources with short `#shortlist/<id>` links.
 - Owner listing editor with AI-ready draft generation from voice or text notes.
 - Owner media organizer for categorizing listing images as hero, rooms, examples, equipment, and props.
 
@@ -36,6 +37,6 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 5. Connect the AI listing assistant to voice input and OpenAI so owners can generate structured listings from spoken notes.
 6. Add AI media helper flows to classify uploaded images as hero, room, example, equipment, or props.
 7. Add owner calendar management, blocked time, and availability overrides.
-8. Persist shared shortlists, comments, and decisions behind user accounts.
+8. Add authentication and durable database storage for shared shortlists, comments, and decisions.
 9. Add post-booking lifecycle: messages, confirmations, reviews, and receipts.
 10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

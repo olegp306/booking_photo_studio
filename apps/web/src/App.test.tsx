@@ -191,10 +191,29 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "Share saved shortlist" }));
 
     expect(await screen.findByRole("heading", { name: "Share saved shortlist" })).toBeInTheDocument();
-    expect(
-      screen.getByDisplayValue("http://localhost:3000/#saved/studio-lumen-karlin,atelier-rosa-vinohrady")
-    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("http://localhost:3000/#shortlist/shortlist-1")).toBeInTheDocument();
     expect(screen.getByText("Compare 2 Prague studios: Studio Lumen Karlin, Atelier Rosa Vinohrady.")).toBeInTheDocument();
+  });
+
+  it("opens a persisted shortlist from a shared shortlist link", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+
+    await screen.findByText("Studio Lumen Karlin");
+    const saveButtons = screen.getAllByRole("button", { name: "Save studio" });
+    await user.click(saveButtons[0]);
+    await user.click(saveButtons[1]);
+    await user.click(screen.getByRole("link", { name: "Saved" }));
+    await user.click(await screen.findByRole("button", { name: "Share saved shortlist" }));
+    await screen.findByDisplayValue("http://localhost:3000/#shortlist/shortlist-2");
+    unmount();
+
+    window.location.hash = "#shortlist/shortlist-2";
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Saved studios" })).toBeInTheDocument();
+    expect(screen.getByText("Studio Lumen Karlin")).toBeInTheDocument();
+    expect(screen.getByText("Atelier Rosa Vinohrady")).toBeInTheDocument();
   });
 
   it("lets collaborators mark shortlist decisions and leave notes", async () => {

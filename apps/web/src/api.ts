@@ -9,12 +9,16 @@ import {
   type BookingIntentRequest,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
+  type SharedShortlist,
+  type SharedShortlistItem,
   type Studio,
   type StudioAvailability,
   type StudioSearchFilters
 } from "@studio-market/shared";
 
 const API_BASE = "/api";
+const localShortlists = new Map<string, SharedShortlist>();
+let localShortlistCount = 0;
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {
   const params = new URLSearchParams();
@@ -150,5 +154,54 @@ export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUp
       rules: updates.rules ?? studio.rules,
       images: updates.images ?? studio.images
     };
+  }
+};
+
+export const createSharedShortlist = async (
+  studioSlugs: string[],
+  items: SharedShortlistItem[] = []
+): Promise<SharedShortlist> => {
+  const uniqueStudioSlugs = Array.from(new Set(studioSlugs));
+
+  try {
+    const response = await fetch(`${API_BASE}/shortlists`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        studioSlugs: uniqueStudioSlugs,
+        items
+      })
+    });
+    if (!response.ok) throw new Error("Failed to create shortlist");
+    const payload = (await response.json()) as { shortlist: SharedShortlist };
+    return payload.shortlist;
+  } catch {
+    localShortlistCount += 1;
+    const shortlist: SharedShortlist = {
+      id: `shortlist-${localShortlistCount}`,
+      studioSlugs: uniqueStudioSlugs,
+      items: uniqueStudioSlugs.map((studioSlug) => ({
+        studioSlug,
+        ...items.find((item) => item.studioSlug === studioSlug)
+      })),
+      createdAt: new Date().toISOString()
+    };
+    localShortlists.set(shortlist.id, shortlist);
+    return shortlist;
+  }
+};
+
+export const loadSharedShortlist = async (shortlistId: string): Promise<SharedShortlist> => {
+  try {
+    const response = await fetch(`${API_BASE}/shortlists/${shortlistId}`);
+    if (!response.ok) throw new Error("Failed to load shortlist");
+    const payload = (await response.json()) as { shortlist: SharedShortlist };
+    return payload.shortlist;
+  } catch {
+    const shortlist = localShortlists.get(shortlistId);
+    if (!shortlist) throw new Error("Shortlist was not found");
+    return shortlist;
   }
 };

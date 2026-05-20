@@ -200,4 +200,52 @@ describe("studio API", () => {
       })
     );
   });
+
+  it("creates and returns shared shortlists", async () => {
+    const server = buildServer();
+    const created = await server.inject({
+      method: "POST",
+      url: "/shortlists",
+      payload: {
+        studioSlugs: ["studio-lumen-karlin", "atelier-rosa-vinohrady"],
+        items: [
+          {
+            studioSlug: "studio-lumen-karlin",
+            decision: "favourite",
+            note: "Best daylight for the hero shots."
+          },
+          {
+            studioSlug: "atelier-rosa-vinohrady",
+            decision: "backup"
+          }
+        ]
+      }
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().shortlist).toEqual(
+      expect.objectContaining({
+        id: "shortlist-1",
+        studioSlugs: ["studio-lumen-karlin", "atelier-rosa-vinohrady"]
+      })
+    );
+
+    const loaded = await server.inject({
+      method: "GET",
+      url: "/shortlists/shortlist-1"
+    });
+
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().shortlist.items).toEqual([
+      {
+        studioSlug: "studio-lumen-karlin",
+        decision: "favourite",
+        note: "Best daylight for the hero shots."
+      },
+      {
+        studioSlug: "atelier-rosa-vinohrady",
+        decision: "backup"
+      }
+    ]);
+  });
 });

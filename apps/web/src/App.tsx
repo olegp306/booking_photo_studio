@@ -29,16 +29,20 @@ import {
   type EquipmentId,
   type FeatureId,
   type OwnerListingUpdate,
+  type SharedShortlistItem,
+  type ShortlistDecision,
   type ShootType,
   type Studio,
   type StudioImage,
   type StudioSearchFilters
 } from "@studio-market/shared";
 import {
+  createSharedShortlist,
   decideOwnerBooking,
   loadAvailability,
   loadCustomerBookings,
   loadOwnerBookings,
+  loadSharedShortlist,
   loadStudios,
   submitBookingRequest,
   updateOwnerListing
@@ -69,7 +73,6 @@ const mediaKindLabels: Record<StudioImage["kind"], string> = {
   equipment: "Equipment and props"
 };
 type AppView = "explore" | "saved" | "bookings" | "host";
-type ShortlistDecision = "favourite" | "backup" | "rejected";
 
 const shortlistDecisionLabels: Record<ShortlistDecision, string> = {
   favourite: "Favourite",
@@ -79,6 +82,7 @@ const shortlistDecisionLabels: Record<ShortlistDecision, string> = {
 
 const initialViewFromHash = (): AppView => {
   if (window.location.hash === "#saved" || window.location.hash.startsWith("#saved/")) return "saved";
+  if (window.location.hash.startsWith("#shortlist/")) return "saved";
   if (window.location.hash === "#bookings") return "bookings";
   if (window.location.hash === "#profile") return "host";
   return "explore";
@@ -99,6 +103,11 @@ const savedSlugsFromHash = () => {
     .filter(Boolean);
 };
 
+const shortlistIdFromHash = () => {
+  const prefix = "#shortlist/";
+  return window.location.hash.startsWith(prefix) ? window.location.hash.slice(prefix.length) : undefined;
+};
+
 export const App = () => {
   const [studios, setStudios] = useState<Studio[]>([]);
   const [activeShootType, setActiveShootType] = useState<ShootType | undefined>();
@@ -110,6 +119,7 @@ export const App = () => {
   const [customerBookings, setCustomerBookings] = useState<BookingIntent[]>([]);
   const [lastGuestEmail, setLastGuestEmail] = useState<string | undefined>();
   const [hashVersion, setHashVersion] = useState(0);
+  const [shortlistItems, setShortlistItems] = useState<Record<string, SharedShortlistItem>>({});
 
   const filters: StudioSearchFilters = useMemo(
     () => ({
@@ -146,8 +156,23 @@ export const App = () => {
     if (!sharedSavedSlugs.length) return;
 
     setSaved(new Set(sharedSavedSlugs));
+    setShortlistItems({});
     setSelectedStudio(undefined);
     setView("saved");
+  }, [hashVersion]);
+
+  useEffect(() => {
+    const sharedShortlistId = shortlistIdFromHash();
+    if (!sharedShortlistId) return;
+
+    loadSharedShortlist(sharedShortlistId).then((shortlist) => {
+      setSaved(new Set(shortlist.studioSlugs));
+      setShortlistItems(
+        Object.fromEntries(shortlist.items.map((item) => [item.studioSlug, item])) as Record<string, SharedShortlistItem>
+      );
+      setSelectedStudio(undefined);
+      setView("saved");
+    });
   }, [hashVersion]);
 
   useEffect(() => {
@@ -228,7 +253,14 @@ export const App = () => {
       <SavedStudios
         savedCount={saved.size}
         savedStudios={savedStudios}
+        shortlistItems={shortlistItems}
         onBackToExplore={() => setView("explore")}
+        onChangeShortlistItem={(item) =>
+          setShortlistItems((current) => ({
+            ...current,
+            [item.studioSlug]: item
+          }))
+        }
         onOpenBookings={() => setView("bookings")}
         onOpenHost={() => setView("host")}
         onOpenStudio={openStudio}
@@ -728,7 +760,9 @@ const CustomerBookings = ({ bookings, onBackToExplore, onOpenSaved, onOpenHost }
 interface SavedStudiosProps {
   savedCount: number;
   savedStudios: Studio[];
+  shortlistItems: Record<string, SharedShortlistItem>;
   onBackToExplore: () => void;
+  onChangeShortlistItem: (item: SharedShortlistItem) => void;
   onOpenBookings: () => void;
   onOpenHost: () => void;
   onOpenStudio: (studio: Studio) => void;
@@ -738,30 +772,53 @@ interface SavedStudiosProps {
 const SavedStudios = ({
   savedCount,
   savedStudios,
+  shortlistItems,
   onBackToExplore,
+  onChangeShortlistItem,
   onOpenBookings,
   onOpenHost,
   onOpenStudio,
   onSave
 }: SavedStudiosProps) => {
   const [shareOpen, setShareOpen] = useState(false);
-  const [shortlistDecisions, setShortlistDecisions] = useState<Record<string, ShortlistDecision>>({});
-  const [shortlistNotes, setShortlistNotes] = useState<Record<string, string>>({});
-  const shareUrl = `${window.location.origin}/#saved/${savedStudios.map((studio) => studio.slug).join(",")}`;
+  const [sharedShortlistId, setSharedShortlistId] = useState<string | undefined>();
+  const [shareStatus, setShareStatus] = useState<"idle" | "creating">("idle");
+  const shareUrl = sharedShortlistId
+    ? `${window.location.origin}/#shortlist/${sharedShortlistId}`
+    : `${window.location.origin}/#saved/${savedStudios.map((studio) => studio.slug).join(",")}`;
   const shareMessage = `Compare ${savedStudios.length} Prague studios: ${savedStudios
     .map((studio) => studio.name)
     .join(", ")}.`;
+  const createShare = async () => {
+    if (shareOpen) {
+      setShareOpen(false);
+      return;
+    }
+
+    setShareOpen(true);
+    if (sharedShortlistId) return;
+
+    setShareStatus("creating");
+    const shortlist = await createSharedShortlist(
+      savedStudios.map((studio) => studio.slug),
+      savedStudios.map((studio) => shortlistItems[studio.slug] ?? { studioSlug: studio.slug })
+    );
+    setSharedShortlistId(shortlist.id);
+    setShareStatus("idle");
+  };
   const updateDecision = (studio: Studio, decision: ShortlistDecision) => {
-    setShortlistDecisions((current) => ({
-      ...current,
-      [studio.slug]: decision
-    }));
+    onChangeShortlistItem({
+      ...shortlistItems[studio.slug],
+      studioSlug: studio.slug,
+      decision
+    });
   };
   const updateNote = (studio: Studio, note: string) => {
-    setShortlistNotes((current) => ({
-      ...current,
-      [studio.slug]: note
-    }));
+    onChangeShortlistItem({
+      ...shortlistItems[studio.slug],
+      studioSlug: studio.slug,
+      note
+    });
   };
 
   return (
@@ -795,9 +852,9 @@ const SavedStudios = ({
       ) : (
         <>
           <section className="shortlist-share">
-            <button className="secondary-button" onClick={() => setShareOpen((current) => !current)} type="button">
+            <button className="secondary-button" onClick={createShare} type="button">
               <Share2 size={17} />
-              Share saved shortlist
+              {shareStatus === "creating" ? "Creating shortlist" : "Share saved shortlist"}
             </button>
             {shareOpen && (
               <section className="share-panel" aria-label="Saved shortlist sharing">
@@ -809,52 +866,53 @@ const SavedStudios = ({
                   Shortlist link
                   <input readOnly value={shareUrl} />
                 </label>
+                {sharedShortlistId && <p className="booking-status">Saved shortlist ready for sharing.</p>}
                 <p>{shareMessage}</p>
               </section>
             )}
           </section>
           <section className="studio-list saved-list" aria-label="Saved studios list">
-            {savedStudios.map((studio) => (
-              <article className="shortlist-card" key={studio.id}>
-                <StudioCard
-                  studio={studio}
-                  isSaved
-                  onOpen={() => onOpenStudio(studio)}
-                  onSave={() => onSave(studio.slug)}
-                />
-                <section className="shortlist-collaboration" aria-label={`Shortlist notes for ${studio.name}`}>
-                  <div className="decision-row" aria-label={`Decision status for ${studio.name}`}>
-                    {(Object.keys(shortlistDecisionLabels) as ShortlistDecision[]).map((decision) => (
-                      <button
-                        className={`decision-button ${
-                          shortlistDecisions[studio.slug] === decision ? "decision-active" : ""
-                        }`}
-                        key={decision}
-                        onClick={() => updateDecision(studio, decision)}
-                        type="button"
-                        aria-label={`Mark ${studio.name} as ${decision}`}
-                      >
-                        {shortlistDecisionLabels[decision]}
-                      </button>
-                    ))}
-                  </div>
-                  {shortlistDecisions[studio.slug] && (
-                    <p className="decision-summary">
-                      Status: {shortlistDecisionLabels[shortlistDecisions[studio.slug]]}
-                    </p>
-                  )}
-                  <label>
-                    Note for {studio.name}
-                    <textarea
-                      value={shortlistNotes[studio.slug] ?? ""}
-                      onChange={(event) => updateNote(studio, event.target.value)}
-                      placeholder="Add a client or photographer note"
-                    />
-                  </label>
-                  {shortlistNotes[studio.slug] && <p className="shortlist-note">{shortlistNotes[studio.slug]}</p>}
-                </section>
-              </article>
-            ))}
+            {savedStudios.map((studio) => {
+              const shortlistItem = shortlistItems[studio.slug];
+
+              return (
+                <article className="shortlist-card" key={studio.id}>
+                  <StudioCard
+                    studio={studio}
+                    isSaved
+                    onOpen={() => onOpenStudio(studio)}
+                    onSave={() => onSave(studio.slug)}
+                  />
+                  <section className="shortlist-collaboration" aria-label={`Shortlist notes for ${studio.name}`}>
+                    <div className="decision-row" aria-label={`Decision status for ${studio.name}`}>
+                      {(Object.keys(shortlistDecisionLabels) as ShortlistDecision[]).map((decision) => (
+                        <button
+                          className={`decision-button ${shortlistItem?.decision === decision ? "decision-active" : ""}`}
+                          key={decision}
+                          onClick={() => updateDecision(studio, decision)}
+                          type="button"
+                          aria-label={`Mark ${studio.name} as ${decision}`}
+                        >
+                          {shortlistDecisionLabels[decision]}
+                        </button>
+                      ))}
+                    </div>
+                    {shortlistItem?.decision && (
+                      <p className="decision-summary">Status: {shortlistDecisionLabels[shortlistItem.decision]}</p>
+                    )}
+                    <label>
+                      Note for {studio.name}
+                      <textarea
+                        value={shortlistItem?.note ?? ""}
+                        onChange={(event) => updateNote(studio, event.target.value)}
+                        placeholder="Add a client or photographer note"
+                      />
+                    </label>
+                    {shortlistItem?.note && <p className="shortlist-note">{shortlistItem.note}</p>}
+                  </section>
+                </article>
+              );
+            })}
           </section>
         </>
       )}
