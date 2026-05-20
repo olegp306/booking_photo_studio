@@ -38,6 +38,7 @@ import {
   type StudioSearchFilters
 } from "@studio-market/shared";
 import {
+  confirmBookingPayment,
   createOwnerAvailabilityBlock,
   createSharedShortlist,
   decideOwnerBooking,
@@ -262,6 +263,12 @@ export const App = () => {
       <CustomerBookings
         bookings={customerBookings}
         onBackToExplore={() => setView("explore")}
+        onConfirmPayment={async (booking) => {
+          const updated = await confirmBookingPayment(booking);
+          setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+          setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+          return updated;
+        }}
         onOpenSaved={() => setView("saved")}
         onOpenHost={() => setView("host")}
       />
@@ -701,12 +708,19 @@ const statusLabel = (status: BookingIntent["status"]) => {
 interface CustomerBookingsProps {
   bookings: BookingIntent[];
   onBackToExplore: () => void;
+  onConfirmPayment: (booking: BookingIntent) => Promise<BookingIntent>;
   onOpenSaved: () => void;
   onOpenHost: () => void;
 }
 
-const CustomerBookings = ({ bookings, onBackToExplore, onOpenSaved, onOpenHost }: CustomerBookingsProps) => {
-  const [checkoutReadyFor, setCheckoutReadyFor] = useState<string | undefined>();
+const CustomerBookings = ({
+  bookings,
+  onBackToExplore,
+  onConfirmPayment,
+  onOpenSaved,
+  onOpenHost
+}: CustomerBookingsProps) => {
+  const [confirmedPaymentFor, setConfirmedPaymentFor] = useState<string | undefined>();
 
   return (
     <main className="app-shell bookings-shell">
@@ -754,15 +768,18 @@ const CustomerBookings = ({ bookings, onBackToExplore, onOpenSaved, onOpenHost }
                 <button
                   className="payment-button"
                   aria-label={`Continue to payment for ${booking.studioName}`}
-                  onClick={() => setCheckoutReadyFor(booking.id)}
+                  onClick={async () => {
+                    const updated = await onConfirmPayment(booking);
+                    setConfirmedPaymentFor(updated.id);
+                  }}
                 >
                   <CreditCard size={17} />
                   Continue to payment
                 </button>
               )}
 
-              {checkoutReadyFor === booking.id && (
-                <p className="booking-status">Checkout ready: Stripe payment will open here.</p>
+              {confirmedPaymentFor === booking.id && (
+                <p className="booking-status">Payment captured: booking confirmed.</p>
               )}
             </article>
           ))

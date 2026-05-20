@@ -5,6 +5,7 @@ import {
   decideBookingIntent,
   findStudioBySlug,
   getAvailabilityForStudio,
+  markBookingPaid,
   searchStudios,
   seedStudios,
   taxonomy,
@@ -225,6 +226,33 @@ export const buildServer = () => {
     return {
       bookings
     };
+  });
+
+  app.post<{
+    Params: { bookingId: string };
+  }>("/bookings/:bookingId/payment", async (request, reply) => {
+    const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
+
+    if (bookingIndex === -1) {
+      return reply.code(404).send({
+        error: "BOOKING_NOT_FOUND",
+        message: "Booking request was not found"
+      });
+    }
+
+    try {
+      const booking = markBookingPaid(bookingIntents[bookingIndex]);
+      bookingIntents[bookingIndex] = booking;
+
+      return {
+        booking
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: "INVALID_PAYMENT_STATE",
+        message: error instanceof Error ? error.message : "Booking cannot be paid"
+      });
+    }
   });
 
   app.get<{

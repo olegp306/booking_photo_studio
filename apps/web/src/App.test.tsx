@@ -151,7 +151,8 @@ describe("App", () => {
     expect(await screen.findByText("Awaiting payment")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
 
-    expect(await screen.findByText("Checkout ready: Stripe payment will open here.")).toBeInTheDocument();
+    expect(await screen.findByText("Confirmed")).toBeInTheDocument();
+    expect(await screen.findByText("Payment captured: booking confirmed.")).toBeInTheDocument();
   });
 
   it("shows saved studios and opens a saved studio detail", async () => {

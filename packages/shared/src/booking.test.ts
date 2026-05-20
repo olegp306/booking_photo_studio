@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBookingIntent, decideBookingIntent, getAvailabilityForStudio } from "./booking";
+import { createBookingIntent, decideBookingIntent, getAvailabilityForStudio, markBookingPaid } from "./booking";
 import { seedStudios } from "./seedStudios";
 
 const lumen = seedStudios[0];
@@ -108,5 +108,22 @@ describe("booking domain", () => {
 
     expect(declined.status).toBe("declined");
     expect(declined.ownerNote).toBe("Room is already blocked for a campaign.");
+  });
+
+  it("confirms bookings after payment is captured", () => {
+    const intent = createBookingIntent(lumen, {
+      roomId: "lumen-main",
+      date: "2026-06-12",
+      startTime: "09:00",
+      durationHours: 2,
+      guestName: "Olga Photographer",
+      guestEmail: "olga@example.com",
+      shootType: "portrait",
+      message: "Small portrait session"
+    });
+
+    const confirmed = markBookingPaid(intent);
+
+    expect(confirmed.status).toBe("confirmed");
   });
 });

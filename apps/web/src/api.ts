@@ -3,6 +3,7 @@ import {
   decideBookingIntent,
   findStudioBySlug,
   getAvailabilityForStudio,
+  markBookingPaid,
   searchStudios,
   seedStudios,
   type BookingIntent,
@@ -143,6 +144,19 @@ export const decideOwnerBooking = async (
     return payload.booking;
   } catch {
     return decideBookingIntent(booking, decision);
+  }
+};
+
+export const confirmBookingPayment = async (booking: BookingIntent): Promise<BookingIntent> => {
+  try {
+    const response = await fetch(`${API_BASE}/bookings/${booking.id}/payment`, {
+      method: "POST"
+    });
+    if (!response.ok) throw new Error("Failed to confirm booking payment");
+    const payload = (await response.json()) as { booking: BookingIntent };
+    return payload.booking;
+  } catch {
+    return markBookingPaid(booking);
   }
 };
 

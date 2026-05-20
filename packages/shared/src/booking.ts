@@ -95,3 +95,14 @@ export const decideBookingIntent = (
     ownerNote
   };
 };
+
+export const markBookingPaid = (booking: BookingIntent): BookingIntent => {
+  if (booking.status !== "awaiting_payment") {
+    throw new Error("Only bookings awaiting payment can be confirmed");
+  }
+
+  return {
+    ...booking,
+    status: "confirmed"
+  };
+};
