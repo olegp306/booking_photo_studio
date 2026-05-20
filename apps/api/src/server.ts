@@ -14,6 +14,7 @@ import {
   type BookingIntentRequest,
   type EquipmentId,
   type FeatureId,
+  type OwnerListingUpdate,
   type OwnerBookingDecision,
   type ShootType,
   type StudioSearchFilters
@@ -27,6 +28,17 @@ const toArray = <T extends string>(value: string | string[] | undefined): T[] | 
 
 export const buildServer = () => {
   const app = Fastify({ logger: false });
+  const studios = seedStudios.map((studio) => ({
+    ...studio,
+    rooms: studio.rooms.map((room) => ({ ...room })),
+    images: studio.images.map((image) => ({ ...image })),
+    moodTags: [...studio.moodTags],
+    shootTypes: [...studio.shootTypes],
+    featureIds: [...studio.featureIds],
+    equipmentIds: [...studio.equipmentIds],
+    amenityIds: [...studio.amenityIds],
+    rules: [...studio.rules]
+  }));
   const bookingIntents: BookingIntent[] = [];
 
   app.register(cors, {
@@ -62,13 +74,13 @@ export const buildServer = () => {
     };
 
     return {
-      studios: searchStudios(seedStudios, filters),
-      total: searchStudios(seedStudios, filters).length
+      studios: searchStudios(studios, filters),
+      total: searchStudios(studios, filters).length
     };
   });
 
   app.get<{ Params: { slug: string } }>("/studios/:slug", async (request, reply) => {
-    const studio = findStudioBySlug(seedStudios, request.params.slug);
+    const studio = findStudioBySlug(studios, request.params.slug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -84,7 +96,7 @@ export const buildServer = () => {
     Params: { slug: string };
     Querystring: { date?: string; durationHours?: string };
   }>("/studios/:slug/availability", async (request, reply) => {
-    const studio = findStudioBySlug(seedStudios, request.params.slug);
+    const studio = findStudioBySlug(studios, request.params.slug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -104,7 +116,7 @@ export const buildServer = () => {
   app.post<{
     Body: BookingIntentRequest & { studioSlug: string };
   }>("/booking-requests", async (request, reply) => {
-    const studio = findStudioBySlug(seedStudios, request.body.studioSlug);
+    const studio = findStudioBySlug(studios, request.body.studioSlug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -186,6 +198,41 @@ export const buildServer = () => {
         message: error instanceof Error ? error.message : "Booking decision is invalid"
       });
     }
+  });
+
+  app.patch<{
+    Params: { slug: string };
+    Body: OwnerListingUpdate;
+  }>("/owner/studios/:slug", async (request, reply) => {
+    const studioIndex = studios.findIndex((studio) => studio.slug === request.params.slug);
+
+    if (studioIndex === -1) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    if (request.body.priceFrom !== undefined && request.body.priceFrom <= 0) {
+      return reply.code(400).send({
+        error: "INVALID_LISTING_UPDATE",
+        message: "Price must be greater than zero"
+      });
+    }
+
+    const current = studios[studioIndex];
+    const updated = {
+      ...current,
+      tagline: request.body.tagline ?? current.tagline,
+      priceFrom: request.body.priceFrom ?? current.priceFrom,
+      bookingMode: request.body.bookingMode ?? current.bookingMode,
+      rules: request.body.rules ?? current.rules
+    };
+    studios[studioIndex] = updated;
+
+    return {
+      studio: updated
+    };
   });
 
   app.get("/taxonomy", async () => ({

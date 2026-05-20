@@ -136,4 +136,22 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "Main Daylight Room" })).toBeInTheDocument();
   });
+
+  it("lets studio owners preview and edit their listing", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+
+    expect(await screen.findByRole("heading", { name: "Manage listing" })).toBeInTheDocument();
+    expect(screen.getAllByText("Studio Lumen Karlin").length).toBeGreaterThan(0);
+
+    await user.clear(screen.getByLabelText("Listing tagline"));
+    await user.type(screen.getByLabelText("Listing tagline"), "Soft editorial loft for portraits");
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    expect(screen.getByText("Soft editorial loft for portraits")).toBeInTheDocument();
+  });
 });

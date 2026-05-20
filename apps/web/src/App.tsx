@@ -22,8 +22,10 @@ import {
   featureLabels,
   shootTypeLabels,
   type AvailabilitySlot,
+  type BookingMode,
   type BookingIntent,
   type FeatureId,
+  type OwnerListingUpdate,
   type ShootType,
   type Studio,
   type StudioSearchFilters
@@ -34,7 +36,8 @@ import {
   loadCustomerBookings,
   loadOwnerBookings,
   loadStudios,
-  submitBookingRequest
+  submitBookingRequest,
+  updateOwnerListing
 } from "./api";
 
 const money = (amount: number, currency: string) =>
@@ -167,10 +170,16 @@ export const App = () => {
         onBackToExplore={() => setView("explore")}
         onOpenSaved={() => setView("saved")}
         onOpenBookings={() => setView("bookings")}
+        studio={studios[0]}
         onDecideBooking={async (booking, decision) => {
           const updated = await decideOwnerBooking(booking, decision);
           setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
           setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        }}
+        onUpdateListing={async (studio, updates) => {
+          const updated = await updateOwnerListing(studio, updates);
+          setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
+          return updated;
         }}
       />
     );
@@ -269,7 +278,6 @@ export const App = () => {
     </main>
   );
 };
-
 interface StudioCardProps {
   studio: Studio;
   isSaved: boolean;
@@ -505,10 +513,12 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
 
 interface OwnerDashboardProps {
   bookings: BookingIntent[];
+  studio?: Studio;
   onBackToExplore: () => void;
   onOpenSaved: () => void;
   onOpenBookings: () => void;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
+  onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
 }
 
 const statusLabel = (status: BookingIntent["status"]) => {
@@ -698,91 +708,243 @@ const SavedStudios = ({
   </main>
 );
 
-const OwnerDashboard = ({ bookings, onBackToExplore, onOpenSaved, onOpenBookings, onDecideBooking }: OwnerDashboardProps) => (
-  <main className="app-shell owner-shell">
-    <section className="hero-band owner-hero">
-      <div className="top-bar">
-        <div>
-          <p className="eyebrow">Studio owners</p>
-          <h1>Owner inbox</h1>
-        </div>
-        <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
-          <Search size={20} />
-        </button>
-      </div>
-      <div className="owner-summary">
-        <Inbox size={20} />
-        <div>
-          <strong>{bookings.length} requests</strong>
-          <span>Review holds before payment collection.</span>
-        </div>
-      </div>
-    </section>
+const OwnerDashboard = ({
+  bookings,
+  studio,
+  onBackToExplore,
+  onOpenSaved,
+  onOpenBookings,
+  onDecideBooking,
+  onUpdateListing
+}: OwnerDashboardProps) => {
+  const [activeTab, setActiveTab] = useState<"requests" | "listing">("requests");
 
-    <section className="owner-list" aria-label="Owner booking requests">
-      {bookings.length === 0 ? (
-        <div className="empty-state">
-          <h2>No requests yet</h2>
-          <p>New booking requests will appear here after a photographer or client asks for a studio time.</p>
+  return (
+    <main className="app-shell owner-shell">
+      <section className="hero-band owner-hero">
+        <div className="top-bar">
+          <div>
+            <p className="eyebrow">Studio owners</p>
+            <h1>{activeTab === "requests" ? "Owner inbox" : "Manage listing"}</h1>
+          </div>
+          <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
+            <Search size={20} />
+          </button>
         </div>
+        <div className="owner-summary">
+          {activeTab === "requests" ? <Inbox size={20} /> : <Home size={20} />}
+          <div>
+            <strong>{activeTab === "requests" ? `${bookings.length} requests` : studio?.name ?? "Studio listing"}</strong>
+            <span>
+              {activeTab === "requests"
+                ? "Review holds before payment collection."
+                : "Keep the public studio profile ready for photographers and clients."}
+            </span>
+          </div>
+        </div>
+        <div className="owner-tabs" role="group" aria-label="Owner dashboard sections">
+          <button
+            className={activeTab === "requests" ? "active" : ""}
+            onClick={() => setActiveTab("requests")}
+            type="button"
+          >
+            Requests
+          </button>
+          <button
+            className={activeTab === "listing" ? "active" : ""}
+            onClick={() => setActiveTab("listing")}
+            type="button"
+          >
+            Listing
+          </button>
+        </div>
+      </section>
+
+      {activeTab === "requests" ? (
+        <OwnerRequests bookings={bookings} onDecideBooking={onDecideBooking} />
+      ) : studio ? (
+        <OwnerListingEditor studio={studio} onUpdateListing={onUpdateListing} />
       ) : (
-        bookings.map((booking) => (
-          <article className="owner-request" key={booking.id}>
-            <div className="owner-request-head">
-              <div>
-                <p className="eyebrow">{booking.studioName}</p>
-                <h2>{booking.guestName}</h2>
-              </div>
-              <span className={`status-pill ${booking.status}`}>{statusLabel(booking.status)}</span>
-            </div>
-            <p>
-              {booking.roomName} · {booking.date} at {booking.startTime} · {booking.durationHours}h
-            </p>
-            <p className="owner-message">{booking.message}</p>
-            <strong>{money(booking.totalPrice, booking.currency)}</strong>
-
-            {booking.status === "pending_owner_approval" && (
-              <div className="owner-actions">
-                <button
-                  className="approve-button"
-                  aria-label={`Approve ${booking.guestName} booking`}
-                  onClick={() => onDecideBooking(booking, "approve")}
-                >
-                  <Check size={17} />
-                  Approve
-                </button>
-                <button
-                  className="decline-button"
-                  aria-label={`Decline ${booking.guestName} booking`}
-                  onClick={() => onDecideBooking(booking, "decline")}
-                >
-                  <X size={17} />
-                  Decline
-                </button>
-              </div>
-            )}
-          </article>
-        ))
+        <section className="owner-list">
+          <div className="empty-state">
+            <h2>No listing loaded</h2>
+            <p>The studio profile will appear here after the catalog loads.</p>
+          </div>
+        </section>
       )}
-    </section>
 
-    <nav className="bottom-nav" aria-label="Primary navigation">
-      <a href="#explore" onClick={onBackToExplore}>
-        <Search size={19} />
-        Explore
-      </a>
-      <a href="#saved" onClick={onOpenSaved}>
-        <Heart size={19} />
-        Saved
-      </a>
-      <a href="#bookings" onClick={onOpenBookings}>
-        <CalendarDays size={19} />
-        Bookings
-      </a>
-      <a className="active" href="#profile">
-        <Home size={19} />
-        Host
-      </a>
-    </nav>
-  </main>
+      <nav className="bottom-nav" aria-label="Primary navigation">
+        <a href="#explore" onClick={onBackToExplore}>
+          <Search size={19} />
+          Explore
+        </a>
+        <a href="#saved" onClick={onOpenSaved}>
+          <Heart size={19} />
+          Saved
+        </a>
+        <a href="#bookings" onClick={onOpenBookings}>
+          <CalendarDays size={19} />
+          Bookings
+        </a>
+        <a className="active" href="#profile">
+          <Home size={19} />
+          Host
+        </a>
+      </nav>
+    </main>
+  );
+};
+
+interface OwnerRequestsProps {
+  bookings: BookingIntent[];
+  onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
+}
+
+const OwnerRequests = ({ bookings, onDecideBooking }: OwnerRequestsProps) => (
+  <section className="owner-list" aria-label="Owner booking requests">
+    {bookings.length === 0 ? (
+      <div className="empty-state">
+        <h2>No requests yet</h2>
+        <p>New booking requests will appear here after a photographer or client asks for a studio time.</p>
+      </div>
+    ) : (
+      bookings.map((booking) => (
+        <article className="owner-request" key={booking.id}>
+          <div className="owner-request-head">
+            <div>
+              <p className="eyebrow">{booking.studioName}</p>
+              <h2>{booking.guestName}</h2>
+            </div>
+            <span className={`status-pill ${booking.status}`}>{statusLabel(booking.status)}</span>
+          </div>
+          <p>
+            {booking.roomName} - {booking.date} at {booking.startTime} - {booking.durationHours}h
+          </p>
+          <p className="owner-message">{booking.message}</p>
+          <strong>{money(booking.totalPrice, booking.currency)}</strong>
+
+          {booking.status === "pending_owner_approval" && (
+            <div className="owner-actions">
+              <button
+                className="approve-button"
+                aria-label={`Approve ${booking.guestName} booking`}
+                onClick={() => onDecideBooking(booking, "approve")}
+              >
+                <Check size={17} />
+                Approve
+              </button>
+              <button
+                className="decline-button"
+                aria-label={`Decline ${booking.guestName} booking`}
+                onClick={() => onDecideBooking(booking, "decline")}
+              >
+                <X size={17} />
+                Decline
+              </button>
+            </div>
+          )}
+        </article>
+      ))
+    )}
+  </section>
 );
+
+interface OwnerListingEditorProps {
+  studio: Studio;
+  onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
+}
+
+const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps) => {
+  const hero = studio.images.find((image) => image.kind === "hero") ?? studio.images[0];
+  const [tagline, setTagline] = useState(studio.tagline);
+  const [priceFrom, setPriceFrom] = useState(String(studio.priceFrom));
+  const [bookingMode, setBookingMode] = useState<BookingMode>(studio.bookingMode);
+  const [rules, setRules] = useState(studio.rules.join("\n"));
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setTagline(studio.tagline);
+    setPriceFrom(String(studio.priceFrom));
+    setBookingMode(studio.bookingMode);
+    setRules(studio.rules.join("\n"));
+  }, [studio]);
+
+  const submitListing = async (event: FormEvent) => {
+    event.preventDefault();
+    const updatedRules = rules
+      .split("\n")
+      .map((rule) => rule.trim())
+      .filter(Boolean);
+
+    await onUpdateListing(studio, {
+      tagline,
+      priceFrom: Number(priceFrom),
+      bookingMode,
+      rules: updatedRules
+    });
+    setSaved(true);
+  };
+
+  return (
+    <section className="owner-list listing-editor" aria-label="Owner listing editor">
+      <article className="listing-preview">
+        <img src={hero.url} alt={hero.alt} />
+        <div>
+          <p className="eyebrow">{studio.district}</p>
+          <h2>{studio.name}</h2>
+          <p>{studio.tagline}</p>
+          <strong>{money(studio.priceFrom, studio.currency)} / hour</strong>
+          <div className="tag-row">
+            <span>{studio.bookingMode}</span>
+            <span>{studio.rooms.length} rooms</span>
+            <span>{studio.equipmentIds.length} equipment items</span>
+          </div>
+        </div>
+      </article>
+
+      <article className="listing-checklist">
+        <h2>Readiness</h2>
+        <div>
+          <span><Check size={15} /> Hero photo</span>
+          <span><Check size={15} /> Rooms and pricing</span>
+          <span><Check size={15} /> Equipment list</span>
+          <span><Check size={15} /> House rules</span>
+        </div>
+      </article>
+
+      <form className="booking-form listing-form" onSubmit={submitListing}>
+        <label>
+          Listing tagline
+          <input value={tagline} onChange={(event) => setTagline(event.target.value)} required />
+        </label>
+        <label>
+          Starting price
+          <input
+            min="1"
+            type="number"
+            value={priceFrom}
+            onChange={(event) => setPriceFrom(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Booking mode
+          <select value={bookingMode} onChange={(event) => setBookingMode(event.target.value as BookingMode)}>
+            <option value="hybrid">Hybrid</option>
+            <option value="request">Request</option>
+            <option value="instant">Instant</option>
+          </select>
+        </label>
+        <label>
+          Rules
+          <textarea value={rules} onChange={(event) => setRules(event.target.value)} required />
+        </label>
+        <button className="request-button" type="submit">
+          Save listing changes
+        </button>
+      </form>
+
+      {saved && <p className="booking-status">Listing updated.</p>}
+    </section>
+  );
+};

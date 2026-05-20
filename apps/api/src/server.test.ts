@@ -132,6 +132,31 @@ describe("studio API", () => {
     expect(approved.json().booking.status).toBe("awaiting_payment");
   });
 
+  it("lets owners update listing basics", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/owner/studios/studio-lumen-karlin",
+      payload: {
+        tagline: "Soft editorial loft for portraits",
+        priceFrom: 1450,
+        bookingMode: "request",
+        rules: ["Minimum booking 2 hours", "No glitter"]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().studio).toEqual(
+      expect.objectContaining({
+        slug: "studio-lumen-karlin",
+        tagline: "Soft editorial loft for portraits",
+        priceFrom: 1450,
+        bookingMode: "request",
+        rules: ["Minimum booking 2 hours", "No glitter"]
+      })
+    );
+  });
+
   it("returns customer bookings by guest email", async () => {
     const server = buildServer();
     await server.inject({

@@ -34,7 +34,7 @@ export const seedStudios: Studio[] = [
     images: [
       {
         id: "lumen-hero",
-        url: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+        url: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80",
         alt: "Bright neutral studio interior with large windows",
         kind: "hero"
       },

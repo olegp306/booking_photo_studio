@@ -171,3 +171,10 @@ export interface BookingIntent {
   message: string;
   ownerNote?: string;
 }
+
+export interface OwnerListingUpdate {
+  tagline?: string;
+  priceFrom?: number;
+  bookingMode?: BookingMode;
+  rules?: string[];
+}

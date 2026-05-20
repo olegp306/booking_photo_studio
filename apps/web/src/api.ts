@@ -7,6 +7,7 @@ import {
   seedStudios,
   type BookingIntent,
   type BookingIntentRequest,
+  type OwnerListingUpdate,
   type OwnerBookingDecision,
   type Studio,
   type StudioAvailability,
@@ -120,5 +121,28 @@ export const decideOwnerBooking = async (
     return payload.booking;
   } catch {
     return decideBookingIntent(booking, decision);
+  }
+};
+
+export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUpdate): Promise<Studio> => {
+  try {
+    const response = await fetch(`${API_BASE}/owner/studios/${studio.slug}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(updates)
+    });
+    if (!response.ok) throw new Error("Failed to update studio listing");
+    const payload = (await response.json()) as { studio: Studio };
+    return payload.studio;
+  } catch {
+    return {
+      ...studio,
+      ...updates,
+      priceFrom: updates.priceFrom ?? studio.priceFrom,
+      bookingMode: updates.bookingMode ?? studio.bookingMode,
+      rules: updates.rules ?? studio.rules
+    };
   }
 };
