@@ -49,6 +49,7 @@ import {
   loadSharedShortlist,
   loadStudios,
   releaseOwnerAvailabilityBlock,
+  submitBookingReview,
   submitBookingRequest,
   updateOwnerListing,
   updateSharedShortlist
@@ -269,6 +270,15 @@ export const App = () => {
           setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
           setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
           return updated;
+        }}
+        onSubmitReview={async (booking, rating, comment) => {
+          const studio = studios.find((candidate) => candidate.slug === booking.studioSlug);
+          if (!studio) throw new Error("Studio was not found");
+          const result = await submitBookingReview(booking, { rating, comment }, studio);
+          setStudios((current) =>
+            current.map((candidate) => (candidate.slug === result.studio.slug ? result.studio : candidate))
+          );
+          return result.studio;
         }}
         onOpenSaved={() => setView("saved")}
         onOpenHost={() => setView("host")}
@@ -716,6 +726,7 @@ interface CustomerBookingsProps {
   bookings: BookingIntent[];
   onBackToExplore: () => void;
   onConfirmPayment: (booking: BookingIntent) => Promise<BookingIntent>;
+  onSubmitReview: (booking: BookingIntent, rating: number, comment: string) => Promise<Studio>;
   onOpenSaved: () => void;
   onOpenHost: () => void;
 }
@@ -724,10 +735,14 @@ const CustomerBookings = ({
   bookings,
   onBackToExplore,
   onConfirmPayment,
+  onSubmitReview,
   onOpenSaved,
   onOpenHost
 }: CustomerBookingsProps) => {
   const [confirmedPaymentFor, setConfirmedPaymentFor] = useState<string | undefined>();
+  const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
+  const [reviewRatings, setReviewRatings] = useState<Record<string, number>>({});
+  const [reviewedStudios, setReviewedStudios] = useState<Record<string, Studio>>({});
 
   return (
     <main className="app-shell bookings-shell">
@@ -787,6 +802,65 @@ const CustomerBookings = ({
 
               {confirmedPaymentFor === booking.id && (
                 <p className="booking-status">Payment captured: booking confirmed.</p>
+              )}
+
+              {booking.status === "completed" && !reviewedStudios[booking.id] && (
+                <form
+                  className="booking-form listing-form"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const studio = await onSubmitReview(
+                      booking,
+                      reviewRatings[booking.id] ?? 5,
+                      reviewComments[booking.id] ?? ""
+                    );
+                    setReviewedStudios((current) => ({
+                      ...current,
+                      [booking.id]: studio
+                    }));
+                  }}
+                >
+                  <label>
+                    Review rating for {booking.studioName}
+                    <select
+                      value={reviewRatings[booking.id] ?? 5}
+                      onChange={(event) =>
+                        setReviewRatings((current) => ({
+                          ...current,
+                          [booking.id]: Number(event.target.value)
+                        }))
+                      }
+                    >
+                      {[5, 4, 3, 2, 1].map((rating) => (
+                        <option key={rating} value={rating}>
+                          {rating}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Review comment for {booking.studioName}
+                    <textarea
+                      value={reviewComments[booking.id] ?? ""}
+                      onChange={(event) =>
+                        setReviewComments((current) => ({
+                          ...current,
+                          [booking.id]: event.target.value
+                        }))
+                      }
+                      placeholder="How was the studio for your shoot?"
+                    />
+                  </label>
+                  <button className="request-button" type="submit">
+                    Submit review for {booking.studioName}
+                  </button>
+                </form>
+              )}
+
+              {reviewedStudios[booking.id] && (
+                <p className="booking-status">
+                  Review posted: {booking.studioName} is now rated {reviewedStudios[booking.id].rating}.
+                </p>
               )}
             </article>
           ))

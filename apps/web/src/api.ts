@@ -1,4 +1,5 @@
 import {
+  applyStudioReview,
   createBookingIntent,
   decideBookingIntent,
   findStudioBySlug,
@@ -16,6 +17,8 @@ import {
   type SharedShortlistItem,
   type Studio,
   type StudioAvailability,
+  type StudioReview,
+  type StudioReviewRequest,
   type StudioSearchFilters
 } from "@studio-market/shared";
 
@@ -171,6 +174,37 @@ export const completeOwnerBooking = async (booking: BookingIntent): Promise<Book
     return payload.booking;
   } catch {
     return markBookingCompleted(booking);
+  }
+};
+
+export const submitBookingReview = async (
+  booking: BookingIntent,
+  request: StudioReviewRequest,
+  studio: Studio
+): Promise<{ review: StudioReview; studio: Studio }> => {
+  try {
+    const response = await fetch(`${API_BASE}/bookings/${booking.id}/review`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+    if (!response.ok) throw new Error("Failed to submit review");
+    return (await response.json()) as { review: StudioReview; studio: Studio };
+  } catch {
+    return {
+      review: {
+        id: `review-${booking.id}`,
+        bookingId: booking.id,
+        studioSlug: booking.studioSlug,
+        guestName: booking.guestName,
+        rating: request.rating,
+        comment: request.comment,
+        createdAt: new Date().toISOString()
+      },
+      studio: applyStudioReview(studio, request.rating)
+    };
   }
 };
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createBookingIntent,
   decideBookingIntent,
+  applyStudioReview,
   getAvailabilityForStudio,
   markBookingCompleted,
   markBookingPaid
@@ -149,5 +150,12 @@ describe("booking domain", () => {
     const completed = markBookingCompleted(confirmed);
 
     expect(completed.status).toBe("completed");
+  });
+
+  it("updates studio review summary after a completed booking review", () => {
+    const reviewed = applyStudioReview(lumen, 3);
+
+    expect(reviewed.reviewCount).toBe(129);
+    expect(reviewed.rating).toBe(4.91);
   });
 });

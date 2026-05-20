@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import {
+  applyStudioReview,
   createBookingIntent,
   decideBookingIntent,
   findStudioBySlug,
@@ -22,6 +23,8 @@ import {
   type SharedShortlist,
   type SharedShortlistItem,
   type ShootType,
+  type StudioReview,
+  type StudioReviewRequest,
   type StudioSearchFilters
 } from "@studio-market/shared";
 
@@ -47,6 +50,8 @@ export const buildServer = () => {
   const bookingIntents: BookingIntent[] = [];
   const shortlists: SharedShortlist[] = [];
   const availabilityBlocks: OwnerAvailabilityBlock[] = [];
+  const reviews: StudioReview[] = [];
+  let reviewCount = 0;
 
   app.register(cors, {
     origin: true
@@ -227,6 +232,68 @@ export const buildServer = () => {
     return {
       bookings
     };
+  });
+
+  app.post<{
+    Params: { bookingId: string };
+    Body: StudioReviewRequest;
+  }>("/bookings/:bookingId/review", async (request, reply) => {
+    const booking = bookingIntents.find((candidate) => candidate.id === request.params.bookingId);
+
+    if (!booking) {
+      return reply.code(404).send({
+        error: "BOOKING_NOT_FOUND",
+        message: "Booking request was not found"
+      });
+    }
+
+    if (booking.status !== "completed") {
+      return reply.code(400).send({
+        error: "BOOKING_NOT_COMPLETED",
+        message: "Only completed bookings can be reviewed"
+      });
+    }
+
+    if (reviews.some((review) => review.bookingId === booking.id)) {
+      return reply.code(409).send({
+        error: "REVIEW_ALREADY_EXISTS",
+        message: "This booking already has a review"
+      });
+    }
+
+    const studioIndex = studios.findIndex((studio) => studio.slug === booking.studioSlug);
+    if (studioIndex === -1) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    try {
+      const studio = applyStudioReview(studios[studioIndex], request.body.rating);
+      studios[studioIndex] = studio;
+      reviewCount += 1;
+      const review: StudioReview = {
+        id: `review-${reviewCount}`,
+        bookingId: booking.id,
+        studioSlug: booking.studioSlug,
+        guestName: booking.guestName,
+        rating: request.body.rating,
+        comment: request.body.comment.trim(),
+        createdAt: new Date().toISOString()
+      };
+      reviews.push(review);
+
+      return reply.code(201).send({
+        review,
+        studio
+      });
+    } catch (error) {
+      return reply.code(400).send({
+        error: "INVALID_REVIEW",
+        message: error instanceof Error ? error.message : "Review is invalid"
+      });
+    }
   });
 
   app.post<{

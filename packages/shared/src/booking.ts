@@ -117,3 +117,18 @@ export const markBookingCompleted = (booking: BookingIntent): BookingIntent => {
     status: "completed"
   };
 };
+
+export const applyStudioReview = (studio: Studio, rating: number): Studio => {
+  if (rating < 1 || rating > 5) {
+    throw new Error("Review rating must be between 1 and 5");
+  }
+
+  const reviewCount = studio.reviewCount + 1;
+  const ratingTotal = studio.rating * studio.reviewCount + rating;
+
+  return {
+    ...studio,
+    rating: Number((ratingTotal / reviewCount).toFixed(2)),
+    reviewCount
+  };
+};

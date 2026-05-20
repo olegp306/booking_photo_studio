@@ -195,6 +195,21 @@ export interface BookingIntent {
   ownerNote?: string;
 }
 
+export interface StudioReview {
+  id: string;
+  bookingId: string;
+  studioSlug: string;
+  guestName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
+export interface StudioReviewRequest {
+  rating: number;
+  comment: string;
+}
+
 export interface OwnerListingUpdate {
   tagline?: string;
   description?: string;

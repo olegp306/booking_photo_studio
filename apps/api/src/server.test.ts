@@ -349,6 +349,53 @@ describe("studio API", () => {
     expect(completed.json().booking.status).toBe("completed");
   });
 
+  it("accepts customer reviews for completed bookings", async () => {
+    const server = buildServer();
+    const created = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00",
+        durationHours: 2,
+        guestName: "Olga Photographer",
+        guestEmail: "olga@example.com",
+        shootType: "portrait",
+        message: "Small portrait session"
+      }
+    });
+    const bookingId = created.json().booking.id;
+    await server.inject({ method: "POST", url: `/bookings/${bookingId}/payment` });
+    await server.inject({ method: "POST", url: `/owner/bookings/${bookingId}/complete` });
+
+    const reviewed = await server.inject({
+      method: "POST",
+      url: `/bookings/${bookingId}/review`,
+      payload: {
+        rating: 3,
+        comment: "Good daylight, check-in could be smoother."
+      }
+    });
+
+    expect(reviewed.statusCode).toBe(201);
+    expect(reviewed.json().review).toEqual(
+      expect.objectContaining({
+        bookingId,
+        studioSlug: "studio-lumen-karlin",
+        rating: 3,
+        comment: "Good daylight, check-in could be smoother."
+      })
+    );
+    expect(reviewed.json().studio).toEqual(
+      expect.objectContaining({
+        rating: 4.91,
+        reviewCount: 129
+      })
+    );
+  });
+
   it("creates and returns shared shortlists", async () => {
     const server = buildServer();
     const created = await server.inject({
