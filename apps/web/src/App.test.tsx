@@ -293,6 +293,26 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "09:00 Main Daylight Room CZK 2,600 unavailable" })).toBeDisabled();
   });
 
+  it("lets owners release blocked calendar slots", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.selectOptions(screen.getByLabelText("Start time"), "11:00");
+    await user.type(screen.getByLabelText("Block reason"), "Private hold");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+    await screen.findByText("11:00 Main Daylight Room blocked.");
+    await user.click(screen.getByRole("button", { name: "Release 11:00 Main Daylight Room block" }));
+
+    expect(screen.queryByText("11:00 Main Daylight Room blocked.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to explore" }));
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+
+    expect(await screen.findByRole("button", { name: "11:00 Main Daylight Room CZK 2,600" })).toBeEnabled();
+  });
+
   it("creates an AI listing draft from owner notes", async () => {
     const user = userEvent.setup();
     render(<App />);

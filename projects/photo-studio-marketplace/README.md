@@ -12,7 +12,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Prague seed catalog with studios, rooms, equipment, props, and photo examples.
 - Explore feed with filters and studio detail views.
 - Availability slots and request-to-book flow.
-- Owner calendar holds for blocking public booking slots.
+- Owner calendar holds for blocking and releasing public booking slots.
 - Owner inbox for approving and declining booking requests.
 - Customer bookings view with payment CTA placeholder.
 - Saved studios shortlist for comparing and sharing candidates.

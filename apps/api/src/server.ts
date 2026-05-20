@@ -169,6 +169,23 @@ export const buildServer = () => {
     });
   });
 
+  app.delete<{ Params: { blockId: string } }>("/owner/availability-blocks/:blockId", async (request, reply) => {
+    const blockIndex = availabilityBlocks.findIndex((block) => block.id === request.params.blockId);
+
+    if (blockIndex === -1) {
+      return reply.code(404).send({
+        error: "AVAILABILITY_BLOCK_NOT_FOUND",
+        message: "Availability block was not found"
+      });
+    }
+
+    availabilityBlocks.splice(blockIndex, 1);
+
+    return {
+      released: true
+    };
+  });
+
   app.post<{
     Body: BookingIntentRequest & { studioSlug: string };
   }>("/booking-requests", async (request, reply) => {

@@ -200,6 +200,22 @@ export const createOwnerAvailabilityBlock = async (
   }
 };
 
+export const releaseOwnerAvailabilityBlock = async (blockId: string): Promise<void> => {
+  const localBlockIndex = localAvailabilityBlocks.findIndex((block) => block.id === blockId);
+  if (localBlockIndex !== -1) {
+    localAvailabilityBlocks.splice(localBlockIndex, 1);
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/owner/availability-blocks/${blockId}`, {
+      method: "DELETE"
+    });
+    if (!response.ok) throw new Error("Failed to release availability block");
+  } catch (error) {
+    if (localBlockIndex === -1) throw error;
+  }
+};
+
 export const createSharedShortlist = async (
   studioSlugs: string[],
   items: SharedShortlistItem[] = []

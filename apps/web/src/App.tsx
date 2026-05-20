@@ -46,6 +46,7 @@ import {
   loadOwnerBookings,
   loadSharedShortlist,
   loadStudios,
+  releaseOwnerAvailabilityBlock,
   submitBookingRequest,
   updateOwnerListing,
   updateSharedShortlist
@@ -309,6 +310,7 @@ export const App = () => {
           setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
         }}
         onBlockAvailability={createOwnerAvailabilityBlock}
+        onReleaseAvailability={releaseOwnerAvailabilityBlock}
         onUpdateListing={async (studio, updates) => {
           const updated = await updateOwnerListing(studio, updates);
           setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
@@ -679,6 +681,7 @@ interface OwnerDashboardProps {
   onOpenBookings: () => void;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
   onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
+  onReleaseAvailability: (blockId: string) => Promise<void>;
   onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
 }
 
@@ -981,6 +984,7 @@ const OwnerDashboard = ({
   onOpenBookings,
   onDecideBooking,
   onBlockAvailability,
+  onReleaseAvailability,
   onUpdateListing
 }: OwnerDashboardProps) => {
   const [activeTab, setActiveTab] = useState<"requests" | "calendar" | "listing">("requests");
@@ -1046,7 +1050,11 @@ const OwnerDashboard = ({
       {activeTab === "requests" ? (
         <OwnerRequests bookings={bookings} onDecideBooking={onDecideBooking} />
       ) : activeTab === "calendar" && studio ? (
-        <OwnerCalendar studio={studio} onBlockAvailability={onBlockAvailability} />
+        <OwnerCalendar
+          studio={studio}
+          onBlockAvailability={onBlockAvailability}
+          onReleaseAvailability={onReleaseAvailability}
+        />
       ) : studio ? (
         <OwnerListingEditor studio={studio} onUpdateListing={onUpdateListing} />
       ) : (
@@ -1137,9 +1145,10 @@ const OwnerRequests = ({ bookings, onDecideBooking }: OwnerRequestsProps) => (
 interface OwnerCalendarProps {
   studio: Studio;
   onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
+  onReleaseAvailability: (blockId: string) => Promise<void>;
 }
 
-const OwnerCalendar = ({ studio, onBlockAvailability }: OwnerCalendarProps) => {
+const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: OwnerCalendarProps) => {
   const [roomId, setRoomId] = useState(studio.rooms[0]?.id ?? "");
   const [date, setDate] = useState("2026-06-12");
   const [startTime, setStartTime] = useState("09:00");
@@ -1160,6 +1169,11 @@ const OwnerCalendar = ({ studio, onBlockAvailability }: OwnerCalendarProps) => {
     });
     setBlocks((current) => [block, ...current]);
     setReason("");
+  };
+
+  const releaseBlock = async (block: OwnerAvailabilityBlock) => {
+    await onReleaseAvailability(block.id);
+    setBlocks((current) => current.filter((currentBlock) => currentBlock.id !== block.id));
   };
 
   return (
@@ -1221,6 +1235,14 @@ const OwnerCalendar = ({ studio, onBlockAvailability }: OwnerCalendarProps) => {
               <span className="status-pill">Blocked</span>
             </div>
             <p className="owner-message">{block.reason}</p>
+            <button
+              aria-label={`Release ${block.startTime} ${room?.name ?? "Room"} block`}
+              className="secondary-button"
+              onClick={() => releaseBlock(block)}
+              type="button"
+            >
+              Release block
+            </button>
           </article>
         );
       })}
