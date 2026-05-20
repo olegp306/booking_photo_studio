@@ -58,6 +58,7 @@ export interface StudioImage {
   url: string;
   alt: string;
   kind: "hero" | "room" | "example" | "equipment";
+  roomId?: string;
 }
 
 export interface StudioRoom {

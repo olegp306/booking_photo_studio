@@ -50,6 +50,17 @@ describe("App", () => {
     expect(screen.getByText("Check availability")).toBeInTheDocument();
   });
 
+  it("shows room-specific media on studio detail", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+
+    const rooms = within(screen.getByLabelText("Studio rooms"));
+    expect(rooms.getByAltText("Open studio room with white walls")).toBeInTheDocument();
+    expect(rooms.getByAltText("Editorial portrait example")).toBeInTheDocument();
+  });
+
   it("opens a studio detail from a shared studio link", async () => {
     window.location.hash = "#studio/studio-lumen-karlin";
 
@@ -601,5 +612,24 @@ describe("App", () => {
       "src",
       "https://example.com/studio-corner.jpg"
     );
+  });
+
+  it("lets owners assign room media to a specific room", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.type(screen.getByLabelText("Media URL"), "https://example.com/main-room-angle.jpg");
+    await user.type(screen.getByLabelText("Media caption"), "Second angle of the daylight cyclorama");
+    await user.selectOptions(screen.getByLabelText("Media category"), "room");
+    await user.selectOptions(screen.getByLabelText("Media room"), "lumen-main");
+    await user.click(screen.getByRole("button", { name: "Add media" }));
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    const mediaLibrary = within(screen.getByLabelText("Studio media library"));
+    expect(mediaLibrary.getByText("Second angle of the daylight cyclorama")).toBeInTheDocument();
+    expect(mediaLibrary.getAllByText("Main Daylight Room").length).toBeGreaterThan(0);
   });
 });

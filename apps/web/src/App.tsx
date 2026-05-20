@@ -605,10 +605,22 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
           ))}
         </div>
 
-        <section className="detail-section">
+        <section className="detail-section" aria-label="Studio rooms">
           <h2>Rooms</h2>
-          {studio.rooms.map((room) => (
+          {studio.rooms.map((room) => {
+            const roomImages = studio.images.filter(
+              (image) => image.roomId === room.id || room.imageIds.includes(image.id)
+            );
+
+            return (
             <div className="room-card" key={room.id}>
+              {roomImages.length > 0 && (
+                <div className="room-media-strip">
+                  {roomImages.slice(0, 3).map((image) => (
+                    <img key={image.id} src={image.url} alt={image.alt} />
+                  ))}
+                </div>
+              )}
               <div>
                 <h3>{room.name}</h3>
                 <p>{room.summary}</p>
@@ -616,7 +628,8 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
               </div>
               <strong>{money(room.pricePerHour, studio.currency)}</strong>
             </div>
-          ))}
+            );
+          })}
         </section>
 
         <section className="detail-section">
@@ -1596,6 +1609,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaCaption, setMediaCaption] = useState("");
   const [mediaKind, setMediaKind] = useState<StudioImage["kind"]>("room");
+  const [mediaRoomId, setMediaRoomId] = useState(studio.rooms[0]?.id ?? "");
   const [props, setProps] = useState(studio.props.join("\n"));
   const [accessNotes, setAccessNotes] = useState(studio.accessNotes);
   const [cancellationPolicy, setCancellationPolicy] = useState(studio.cancellationPolicy);
@@ -1614,6 +1628,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setAmenityIds(studio.amenityIds);
     setImages(studio.images);
     setRooms(studio.rooms);
+    setMediaRoomId(studio.rooms[0]?.id ?? "");
     setProps(studio.props.join("\n"));
     setAccessNotes(studio.accessNotes);
     setCancellationPolicy(studio.cancellationPolicy);
@@ -1668,19 +1683,30 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     const trimmedUrl = mediaUrl.trim();
     const trimmedCaption = mediaCaption.trim();
     if (!trimmedUrl || !trimmedCaption) return;
+    const imageId = `owner-media-${Date.now()}`;
+    const assignedRoomId = mediaKind === "room" && mediaRoomId ? mediaRoomId : undefined;
 
     setImages((current) => [
       ...current,
       {
-        id: `owner-media-${Date.now()}`,
+        id: imageId,
         url: trimmedUrl,
         alt: trimmedCaption,
-        kind: mediaKind
+        kind: mediaKind,
+        roomId: assignedRoomId
       }
     ]);
+    if (assignedRoomId) {
+      setRooms((current) =>
+        current.map((room) =>
+          room.id === assignedRoomId ? { ...room, imageIds: [...room.imageIds, imageId] } : room
+        )
+      );
+    }
     setMediaUrl("");
     setMediaCaption("");
     setMediaKind("room");
+    setMediaRoomId(rooms[0]?.id ?? "");
   };
 
   const submitListing = async (event: FormEvent) => {
@@ -1976,13 +2002,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
           <h2>Studio media</h2>
           <div className="media-grid">
             {images.map((image) => (
-              <article className="media-card" key={image.id}>
-                <img src={image.url} alt={image.alt} />
-                <div>
-                  <span>{mediaKindLabels[image.kind]}</span>
-                  <p>{image.alt}</p>
-                </div>
-              </article>
+              <MediaCard image={image} key={image.id} rooms={rooms} />
             ))}
           </div>
           <div className="media-form">
@@ -2005,11 +2025,34 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
             </label>
             <label>
               Media category
-              <select value={mediaKind} onChange={(event) => setMediaKind(event.target.value as StudioImage["kind"])}>
+              <select
+                value={mediaKind}
+                onChange={(event) => {
+                  const nextKind = event.target.value as StudioImage["kind"];
+                  setMediaKind(nextKind);
+                  if (nextKind !== "room") setMediaRoomId("");
+                  if (nextKind === "room" && !mediaRoomId) setMediaRoomId(rooms[0]?.id ?? "");
+                }}
+              >
                 <option value="hero">Hero</option>
                 <option value="room">Rooms</option>
                 <option value="example">Example shoots</option>
                 <option value="equipment">Equipment and props</option>
+              </select>
+            </label>
+            <label>
+              Media room
+              <select
+                disabled={mediaKind !== "room"}
+                value={mediaKind === "room" ? mediaRoomId : ""}
+                onChange={(event) => setMediaRoomId(event.target.value)}
+              >
+                <option value="">No room</option>
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name}
+                  </option>
+                ))}
               </select>
             </label>
             <button className="secondary-button" onClick={addMedia} type="button">
@@ -2079,5 +2122,25 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       {saved && <p className="booking-status">Listing updated.</p>}
       {submittedForReview && <p className="booking-status">Listing submitted for review.</p>}
     </section>
+  );
+};
+
+interface MediaCardProps {
+  image: StudioImage;
+  rooms: StudioRoom[];
+}
+
+const MediaCard = ({ image, rooms }: MediaCardProps) => {
+  const assignedRoom = rooms.find((room) => room.id === image.roomId || room.imageIds.includes(image.id));
+
+  return (
+    <article className="media-card">
+      <img src={image.url} alt={image.alt} />
+      <div>
+        <span>{mediaKindLabels[image.kind]}</span>
+        {assignedRoom ? <span className="media-room-label">{assignedRoom.name}</span> : null}
+        <p>{image.alt}</p>
+      </div>
+    </article>
   );
 };

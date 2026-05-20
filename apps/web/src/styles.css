@@ -394,6 +394,19 @@ h2 {
   background: #fff;
 }
 
+.room-media-strip {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 88px;
+}
+
+.room-media-strip img {
+  width: 42px;
+  height: 54px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .room-card + .room-card {
   margin-top: 10px;
 }
@@ -1216,9 +1229,15 @@ h2 {
 }
 
 .media-card span {
+  display: inline-flex;
+  margin-right: 6px;
   color: #6a4630;
   font-size: 12px;
   font-weight: 800;
+}
+
+.media-card .media-room-label {
+  color: #8f5d2f;
 }
 
 .media-card p {
