@@ -54,6 +54,7 @@ import {
   loadOwnerListingDrafts,
   loadOwnerAvailabilityBlocks,
   loadOwnerBookings,
+  loadReferralSummary,
   loadSharedShortlist,
   loadStudios,
   loadSupportTickets,
@@ -71,6 +72,7 @@ import {
   type MediaSuggestionResult,
   type LaunchReadiness,
   type ReferralSource,
+  type ReferralSummary,
   type SupportEvent,
   type SupportTicket,
   type UserRole,
@@ -137,6 +139,13 @@ const roleLabels: Record<UserRole, string> = {
   admin: "Admin"
 };
 const roleOptions: UserRole[] = ["client", "photographer", "studio_owner"];
+const referralSourceLabels: Record<ReferralSource, string> = {
+  telegram: "Telegram",
+  photographer: "Photographer",
+  studio_owner: "Studio owner",
+  direct: "Direct",
+  unknown: "Unknown"
+};
 
 const initialViewFromHash = (): ExtendedAppView => {
   if (window.location.hash.startsWith("#telegram-drafts")) return "telegram-drafts";
@@ -686,7 +695,6 @@ const SupportDrawer = ({ events, onClose, relatedStudioSlug, screen }: SupportDr
     if (!trimmedMessage) return;
 
     await createSupportTicket({
-      category: "idea",
       message: trimmedMessage,
       includeActivity,
       screen,
@@ -1784,6 +1792,7 @@ const SupportInbox = () => {
 
 const OwnerLaunchReadiness = () => {
   const [readiness, setReadiness] = useState<LaunchReadiness>();
+  const [referralSummary, setReferralSummary] = useState<ReferralSummary>();
   const [webhookStatus, setWebhookStatus] = useState<{
     state: "idle" | "loading" | "ready" | "error";
     message?: string;
@@ -1794,6 +1803,7 @@ const OwnerLaunchReadiness = () => {
 
   useEffect(() => {
     loadLaunchReadiness().then(setReadiness);
+    loadReferralSummary().then(setReferralSummary);
   }, []);
 
   const services = readiness
@@ -1894,7 +1904,39 @@ const OwnerLaunchReadiness = () => {
           {webhookStatus.webhookUrl ? <code className="launch-webhook-url">{webhookStatus.webhookUrl}</code> : null}
         </div>
       </article>
+
+      <OwnerReferralSummary summary={referralSummary} />
     </section>
+  );
+};
+
+const OwnerReferralSummary = ({ summary }: { summary?: ReferralSummary }) => {
+  const sources = (Object.entries(summary?.bySource ?? {}) as Array<[ReferralSource, number]>)
+    .filter(([, count]) => count > 0)
+    .sort(([, leftCount], [, rightCount]) => rightCount - leftCount);
+
+  return (
+    <article className="listing-status-panel referral-summary-panel">
+      <div>
+        <p className="eyebrow">Growth signals</p>
+        <h2>Referral sources</h2>
+        <p>{summary ? `${summary.total} visits tracked` : "Loading referral visits..."}</p>
+      </div>
+      <div className="launch-next-steps">
+        {(sources.length ? sources : [["unknown", 0] as [ReferralSource, number]]).map(([source, count]) => (
+          <span key={source}>
+            <Check size={15} />
+            {referralSourceLabels[source]} <strong>{count}</strong>
+          </span>
+        ))}
+        {summary?.recent.slice(0, 3).map((referral) => (
+          <span key={referral.id}>
+            <Share2 size={15} />
+            {referral.path}
+          </span>
+        ))}
+      </div>
+    </article>
   );
 };
 

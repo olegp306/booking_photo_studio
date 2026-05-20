@@ -550,6 +550,31 @@ describe("studio API", () => {
     );
   });
 
+  it("triages free-text support tickets without a submitted category", async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/support/tickets",
+      payload: {
+        message: "Payment failed after I clicked continue to payment.",
+        includeActivity: true,
+        screen: "#bookings",
+        events: []
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().ticket).toEqual(
+      expect.objectContaining({
+        id: "support-ticket-1",
+        category: "payment",
+        triageReason: expect.stringContaining("payment"),
+        message: "Payment failed after I clicked continue to payment."
+      })
+    );
+  });
+
   it("persists support tickets across API restarts", async () => {
     const localDataDir = mkdtempSync(join(tmpdir(), "studio-support-"));
     const server = buildServer({
@@ -611,6 +636,52 @@ describe("studio API", () => {
         session: expect.objectContaining({
           role: "photographer"
         })
+      })
+    );
+  });
+
+  it("summarizes referral sources for growth tracking", async () => {
+    const server = buildServer();
+
+    await server.inject({
+      method: "POST",
+      url: "/referrals",
+      payload: {
+        source: "photographer",
+        path: "#studio/studio-lumen-karlin"
+      }
+    });
+    await server.inject({
+      method: "POST",
+      url: "/referrals",
+      payload: {
+        source: "telegram",
+        path: "#telegram-drafts"
+      }
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/referrals/summary"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        total: 2,
+        bySource: expect.objectContaining({
+          photographer: 1,
+          telegram: 1,
+          studio_owner: 0,
+          direct: 0,
+          unknown: 0
+        }),
+        recent: expect.arrayContaining([
+          expect.objectContaining({
+            source: "telegram",
+            path: "#telegram-drafts"
+          })
+        ])
       })
     );
   });
@@ -745,6 +816,32 @@ describe("studio API", () => {
     expect(JSON.stringify(response.json().studio)).not.toContain("accessNotes");
     expect(JSON.stringify(response.json().studio)).not.toContain("cancellationPolicy");
     expect(JSON.stringify(response.json().studio)).not.toContain("listingStatus");
+  });
+
+  it("tracks public studio detail access metrics", async () => {
+    const server = buildServer();
+
+    await server.inject({
+      method: "GET",
+      url: "/public/studios/studio-lumen-karlin"
+    });
+    await server.inject({
+      method: "GET",
+      url: "/public/studios/studio-lumen-karlin"
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/internal/public-metrics"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().metrics).toEqual([
+      expect.objectContaining({
+        path: "/public/studios/studio-lumen-karlin",
+        count: 2
+      })
+    ]);
   });
 
   it("returns 404 for missing studio", async () => {

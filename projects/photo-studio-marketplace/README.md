@@ -47,8 +47,11 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Receipt download preparation action from customer bookings.
 - Always-visible support float with a lightweight support drawer that captures user text and recent activity context by default.
 - Support tickets persist to local JSON storage through `LOCAL_DATA_DIR` and can be reviewed in the Host support inbox.
+- Support messages are free text for users and get an internal v1 triage category for product review.
 - Referral source visits can be captured from shared links such as `?ref=telegram` or `?ref=photographer`.
+- Host launch view summarizes referral source totals and recent attributed paths.
 - Public-safe studio responses keep owner operational fields out of marketplace-facing API payloads.
+- Public studio detail requests write local access metrics for early scraping and demand monitoring.
 - Launch readiness panel for OpenAI, Telegram owner bot, public app URL, and Stripe keys.
 - API readiness endpoint plus AI listing draft and Telegram webhook stubs with local fallback behavior.
 - OpenAI-backed listing draft generation through the Responses API when `OPENAI_API_KEY` is set.
@@ -64,7 +67,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Fill local secrets in `../../.env.local`; the committed template is `../../.env.example`.
 - Required for the live Telegram and AI pass: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `PUBLIC_APP_URL`.
 - Optional but recommended for bot webhook hardening: `TELEGRAM_WEBHOOK_SECRET`.
-- Optional local persistence path for imported owner drafts, booking requests, calendar blocks, shared shortlists, support tickets, referral events, and prototype sessions: `LOCAL_DATA_DIR`.
+- Optional local persistence path for imported owner drafts, booking requests, calendar blocks, shared shortlists, support tickets, referral events, public API metrics, and prototype sessions: `LOCAL_DATA_DIR`.
 - Optional until production payments are wired: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `OPENAI_LISTING_MODEL`.
 
 ## Project Docs

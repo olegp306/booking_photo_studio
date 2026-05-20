@@ -27,6 +27,7 @@ export interface SupportEvent {
 export interface SupportTicket {
   id: string;
   category: SupportCategory;
+  triageReason?: string;
   message: string;
   includeActivity: boolean;
   session: UserSession;
@@ -47,6 +48,20 @@ export interface ReferralRecord {
   path: string;
   session: UserSession;
   createdAt: string;
+}
+
+export type ReferralSourceTotals = Record<ReferralSource, number>;
+
+export interface ReferralSummary {
+  total: number;
+  bySource: ReferralSourceTotals;
+  recent: ReferralRecord[];
+}
+
+export interface PublicApiMetric {
+  path: string;
+  count: number;
+  lastSeenAt: string;
 }
 
 export type ShootType =

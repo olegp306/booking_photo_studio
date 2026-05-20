@@ -148,7 +148,6 @@ describe("App", () => {
     expect(await screen.findByText("Support request sent.")).toBeInTheDocument();
     expect(supportRequests[0]).toEqual(
       expect.objectContaining({
-        category: "idea",
         message: "I cannot tell if this slot is confirmed.",
         includeActivity: true,
         relatedStudioSlug: "studio-lumen-karlin",
@@ -159,6 +158,7 @@ describe("App", () => {
         ])
       })
     );
+    expect(supportRequests[0]).not.toHaveProperty("category");
   });
 
   it("shows support inbox with submitted context in the owner dashboard", async () => {
@@ -208,6 +208,52 @@ describe("App", () => {
     expect(screen.getByText("Marta Photographer - Photographer")).toBeInTheDocument();
     expect(screen.getByText("#bookings")).toBeInTheDocument();
     expect(screen.getByText("Opened Studio Lumen Karlin")).toBeInTheDocument();
+  });
+
+  it("shows referral source totals in the host growth view", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/referrals/summary")) {
+        return new Response(
+          JSON.stringify({
+            total: 3,
+            bySource: {
+              telegram: 2,
+              photographer: 1,
+              studio_owner: 0,
+              direct: 0,
+              unknown: 0
+            },
+            recent: [
+              {
+                id: "referral-3",
+                source: "telegram",
+                path: "#telegram-drafts",
+                session: {
+                  id: "demo-session",
+                  role: "photographer",
+                  displayName: "Marta Photographer"
+                },
+                createdAt: "2026-05-20T10:00:00.000Z"
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+
+    expect(await screen.findByRole("heading", { name: "Referral sources" })).toBeInTheDocument();
+    expect(screen.getByText("3 visits tracked")).toBeInTheDocument();
+    expect(screen.getByText("Telegram")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("#telegram-drafts")).toBeInTheDocument();
   });
 
   it("filters studios by shoot type", async () => {

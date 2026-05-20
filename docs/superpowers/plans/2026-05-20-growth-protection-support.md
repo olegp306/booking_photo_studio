@@ -881,3 +881,73 @@ Expected:
 **Placeholder scan:** No TODO/TBD placeholders remain. Each code-changing task includes concrete snippets and commands.
 
 **Type consistency:** Shared type names match API and frontend plan names: `SupportTicket`, `SupportCategory`, `SupportEvent`, `ReferralSource`, `ReferralRecord`, `UserSession`.
+
+---
+
+### Task 7: Free-Text Support Triage
+
+**Files:**
+- Modify: `packages/shared/src/types.ts`
+- Modify: `apps/api/src/server.test.ts`
+- Modify: `apps/api/src/server.ts`
+- Modify: `apps/web/src/App.test.tsx`
+- Modify: `apps/web/src/App.tsx`
+- Modify: `apps/web/src/api.ts`
+
+- [x] **Step 1: Add failing tests for support auto-triage**
+
+Verify that `/support/tickets` accepts free text without a user-facing category and assigns an internal category plus triage reason. Verify the support drawer submits only the message/activity context.
+
+- [x] **Step 2: Implement deterministic v1 triage**
+
+Add a local rule-based triage helper that can later be replaced with AI classification. Keep categories internal and expose the chosen category in the Host inbox.
+
+- [x] **Step 3: Verify targeted tests**
+
+Run API and web tests for support triage.
+
+---
+
+### Task 8: Referral Summary For Host Growth View
+
+**Files:**
+- Modify: `packages/shared/src/types.ts`
+- Modify: `apps/api/src/server.test.ts`
+- Modify: `apps/api/src/server.ts`
+- Modify: `apps/web/src/App.test.tsx`
+- Modify: `apps/web/src/App.tsx`
+- Modify: `apps/web/src/api.ts`
+
+- [x] **Step 1: Add failing API and web tests for referral summary**
+
+Verify `GET /referrals/summary` returns totals by source and recent referral records, and verify the Host launch/growth view renders those totals.
+
+- [x] **Step 2: Implement API helper and Host UI**
+
+Add `loadReferralSummary` and a compact Host growth panel for first-channel attribution.
+
+- [x] **Step 3: Verify targeted tests**
+
+Run API and web tests for referral summary.
+
+---
+
+### Task 9: Public API Telemetry For Protection
+
+**Files:**
+- Modify: `packages/shared/src/types.ts`
+- Modify: `apps/api/src/server.test.ts`
+- Modify: `apps/api/src/server.ts`
+- Modify: `projects/photo-studio-marketplace/README.md`
+
+- [x] **Step 1: Add failing API test for public studio access metrics**
+
+Verify public studio detail requests increment a local per-path access counter and can be inspected through an internal metrics endpoint.
+
+- [x] **Step 2: Implement local public access metrics**
+
+Persist public endpoint access counts through `LOCAL_DATA_DIR` using the existing JSON resource store.
+
+- [x] **Step 3: Document protection posture**
+
+Add public API telemetry to the README current build and local persistence notes.

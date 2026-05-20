@@ -16,6 +16,7 @@ import {
   type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
+  type ReferralSummary,
   type ReferralSource,
   type SharedShortlist,
   type SharedShortlistItem,
@@ -36,7 +37,7 @@ import {
 const API_BASE = "/api";
 export type AiDraftMode = "local-fallback" | "openai";
 export type ImportedDraftMode = "local-fallback" | "openai";
-export type { ReferralSource, SupportCategory, SupportEvent, SupportTicket, UserRole, UserSession };
+export type { ReferralSource, ReferralSummary, SupportCategory, SupportEvent, SupportTicket, UserRole, UserSession };
 
 export interface LaunchServiceReadiness {
   configured: boolean;
@@ -84,7 +85,7 @@ export interface MediaSuggestionResult {
 }
 
 export interface SupportTicketRequest {
-  category: SupportCategory;
+  category?: SupportCategory;
   message: string;
   includeActivity: boolean;
   screen: string;
@@ -118,6 +119,22 @@ const isOpenOverrideSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlo
   block.roomId === slot.roomId &&
   block.date === slot.date &&
   block.startTime === slot.startTime;
+
+const triageLocalSupportCategory = (message: string): SupportCategory => {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("payment") || normalized.includes("paid") || normalized.includes("stripe")) return "payment";
+  if (normalized.includes("bug") || normalized.includes("broken") || normalized.includes("error")) return "bug";
+  if (normalized.includes("listing") || normalized.includes("owner") || normalized.includes("studio profile")) {
+    return "owner_listing";
+  }
+  if (normalized.includes("wrong") || normalized.includes("address") || normalized.includes("photo")) {
+    return "studio_info_wrong";
+  }
+  if (normalized.includes("booking") || normalized.includes("slot") || normalized.includes("confirmed")) {
+    return "booking_issue";
+  }
+  return "idea";
+};
 
 export const fallbackLaunchReadiness: LaunchReadiness = {
   ok: true,
@@ -230,6 +247,10 @@ export const createSupportTicket = async (request: SupportTicketRequest): Promis
     const ticket: SupportTicket = {
       id: `local-support-ticket-${localSupportTickets.length + 1}`,
       ...request,
+      category: request.category ?? triageLocalSupportCategory(request.message),
+      triageReason: request.category
+        ? "Submitted with an existing internal category."
+        : "Local fallback classified the free-text support message.",
       session: localSession,
       createdAt: new Date().toISOString()
     };
@@ -263,6 +284,26 @@ export const trackReferralSource = async (source: ReferralSource, path: string):
     });
   } catch {
     return undefined;
+  }
+};
+
+export const loadReferralSummary = async (): Promise<ReferralSummary> => {
+  try {
+    const response = await fetch(`${API_BASE}/referrals/summary`);
+    if (!response.ok) throw new Error("Failed to load referral summary");
+    return (await response.json()) as ReferralSummary;
+  } catch {
+    return {
+      total: 0,
+      bySource: {
+        telegram: 0,
+        photographer: 0,
+        studio_owner: 0,
+        direct: 0,
+        unknown: 0
+      },
+      recent: []
+    };
   }
 };
 

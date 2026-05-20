@@ -21,10 +21,12 @@ import {
   type OwnerListingUpdate,
   type OwnerBookingDecision,
   type OwnerAvailabilityBlock,
+  type PublicApiMetric,
   type SharedShortlist,
   type SharedShortlistItem,
   type ReferralRecord,
   type ReferralSource,
+  type ReferralSourceTotals,
   type ShootType,
   type Studio,
   type SupportCategory,
@@ -81,6 +83,47 @@ const referralSources: ReferralSource[] = ["telegram", "photographer", "studio_o
 const isReferralSource = (source: unknown): source is ReferralSource =>
   typeof source === "string" && referralSources.includes(source as ReferralSource);
 
+const referralSourceLabels = Object.fromEntries(referralSources.map((source) => [source, 0])) as ReferralSourceTotals;
+
+const triageSupportTicket = (message: string): { category: SupportCategory; triageReason: string } => {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("payment") || normalized.includes("paid") || normalized.includes("stripe")) {
+    return {
+      category: "payment",
+      triageReason: "Matched payment-related words in the support message."
+    };
+  }
+  if (normalized.includes("bug") || normalized.includes("broken") || normalized.includes("error")) {
+    return {
+      category: "bug",
+      triageReason: "Matched bug or error words in the support message."
+    };
+  }
+  if (normalized.includes("listing") || normalized.includes("owner") || normalized.includes("studio profile")) {
+    return {
+      category: "owner_listing",
+      triageReason: "Matched owner listing words in the support message."
+    };
+  }
+  if (normalized.includes("wrong") || normalized.includes("address") || normalized.includes("photo")) {
+    return {
+      category: "studio_info_wrong",
+      triageReason: "Matched studio information correction words in the support message."
+    };
+  }
+  if (normalized.includes("booking") || normalized.includes("slot") || normalized.includes("confirmed")) {
+    return {
+      category: "booking_issue",
+      triageReason: "Matched booking or slot words in the support message."
+    };
+  }
+
+  return {
+    category: "idea",
+    triageReason: "No operational issue keywords matched, so this is treated as product feedback."
+  };
+};
+
 interface BuildServerOptions {
   config?: Partial<RuntimeConfig>;
   fetch?: FetchLike;
@@ -108,6 +151,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   const sessionStore = createJsonResourceStore<UserSession>(config.localDataDir, "sessions.json");
   const supportTicketStore = createJsonResourceStore<SupportTicket>(config.localDataDir, "support-tickets.json");
   const referralStore = createJsonResourceStore<ReferralRecord>(config.localDataDir, "referrals.json");
+  const publicMetricStore = createJsonResourceStore<PublicApiMetric>(config.localDataDir, "public-api-metrics.json");
   const listingDraftStore = createListingDraftStore(config.localDataDir);
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
@@ -149,6 +193,19 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     props: studio.props,
     rules: studio.rules
   });
+  const recordPublicMetric = async (path: string) => {
+    const metrics = await publicMetricStore.list();
+    const existing = metrics.find((metric) => metric.path === path);
+    const nextMetric: PublicApiMetric = {
+      path,
+      count: (existing?.count ?? 0) + 1,
+      lastSeenAt: new Date().toISOString()
+    };
+    await publicMetricStore.setAll([
+      nextMetric,
+      ...metrics.filter((metric) => metric.path !== path)
+    ]);
+  };
 
   app.register(cors, {
     origin: true
@@ -204,7 +261,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       userAgent?: string;
     };
   }>("/support/tickets", async (request, reply) => {
-    if (!isSupportCategory(request.body.category)) {
+    if (request.body.category !== undefined && !isSupportCategory(request.body.category)) {
       return reply.code(400).send({
         error: "INVALID_SUPPORT_CATEGORY",
         message: "Support category is required"
@@ -220,9 +277,13 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     }
 
     const tickets = await supportTicketStore.list();
+    const triage = request.body.category
+      ? { category: request.body.category, triageReason: "Submitted with an existing internal category." }
+      : triageSupportTicket(message);
     const ticket: SupportTicket = {
       id: `support-ticket-${tickets.length + 1}`,
-      category: request.body.category,
+      category: triage.category,
+      triageReason: triage.triageReason,
       message,
       includeActivity: request.body.includeActivity ?? true,
       session: (await sessionStore.list())[0] ?? defaultSession,
@@ -264,6 +325,23 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     return reply.code(201).send({
       referral
     });
+  });
+
+  app.get("/referrals/summary", async () => {
+    const referrals = await referralStore.list();
+    const bySource = referrals.reduce<ReferralSourceTotals>(
+      (totals, referral) => ({
+        ...totals,
+        [referral.source]: totals[referral.source] + 1
+      }),
+      { ...referralSourceLabels }
+    );
+
+    return {
+      total: referrals.length,
+      bySource,
+      recent: referrals.slice(0, 6)
+    };
   });
 
   app.post<{
@@ -459,8 +537,14 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
+    await recordPublicMetric(`/public/studios/${request.params.slug}`);
+
     return { studio: toPublicStudio(studio) };
   });
+
+  app.get("/internal/public-metrics", async () => ({
+    metrics: await publicMetricStore.list()
+  }));
 
   app.get<{
     Params: { slug: string };
