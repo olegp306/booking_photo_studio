@@ -432,6 +432,13 @@ export const buildServer = () => {
       });
     }
 
+    if (request.body.rooms?.some((room) => room.pricePerHour <= 0)) {
+      return reply.code(400).send({
+        error: "INVALID_LISTING_UPDATE",
+        message: "Room price must be greater than zero"
+      });
+    }
+
     const current = studios[studioIndex];
     const updated = {
       ...current,
@@ -444,7 +451,8 @@ export const buildServer = () => {
       equipmentIds: request.body.equipmentIds ?? current.equipmentIds,
       amenityIds: request.body.amenityIds ?? current.amenityIds,
       rules: request.body.rules ?? current.rules,
-      images: request.body.images ?? current.images
+      images: request.body.images ?? current.images,
+      rooms: request.body.rooms ?? current.rooms
     };
     studios[studioIndex] = updated;
 

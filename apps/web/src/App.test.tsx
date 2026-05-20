@@ -335,6 +335,24 @@ describe("App", () => {
     expect(screen.getByText("Soft editorial loft for portraits")).toBeInTheDocument();
   });
 
+  it("lets owners update room details and pricing", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+
+    await user.clear(screen.getByLabelText("Main Daylight Room summary"));
+    await user.type(screen.getByLabelText("Main Daylight Room summary"), "Updated daylight room for portraits");
+    await user.clear(screen.getByLabelText("Main Daylight Room hourly price"));
+    await user.type(screen.getByLabelText("Main Daylight Room hourly price"), "1550");
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    expect(screen.getByText("Updated daylight room for portraits")).toBeInTheDocument();
+    expect(screen.getByText("CZK 1,550 / hour")).toBeInTheDocument();
+  });
+
   it("lets owners block calendar slots from booking", async () => {
     const user = userEvent.setup();
     render(<App />);

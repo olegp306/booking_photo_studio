@@ -374,6 +374,58 @@ describe("studio API", () => {
     );
   });
 
+  it("lets owners update room details and pricing", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/owner/studios/studio-lumen-karlin",
+      payload: {
+        rooms: [
+          {
+            id: "lumen-main",
+            name: "Main Daylight Room",
+            summary: "Updated daylight room for editorial portraits.",
+            areaSqm: 72,
+            ceilingHeightM: 3.8,
+            capacity: 10,
+            pricePerHour: 1550,
+            bookingMode: "hybrid",
+            featureIds: ["natural-light", "cyclorama"],
+            equipmentIds: ["strobes", "softboxes", "c-stands"],
+            imageIds: ["lumen-room-main"]
+          },
+          {
+            id: "lumen-product",
+            name: "Product Corner",
+            summary: "Compact tabletop set for product work.",
+            areaSqm: 24,
+            ceilingHeightM: 3.2,
+            capacity: 4,
+            pricePerHour: 900,
+            bookingMode: "instant",
+            featureIds: ["product-table", "paper-backdrops"],
+            equipmentIds: ["continuous-lights", "tripods"],
+            imageIds: ["lumen-product"]
+          }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().studio.rooms).toEqual([
+      expect.objectContaining({
+        id: "lumen-main",
+        summary: "Updated daylight room for editorial portraits.",
+        pricePerHour: 1550
+      }),
+      expect.objectContaining({
+        id: "lumen-product",
+        pricePerHour: 900,
+        bookingMode: "instant"
+      })
+    ]);
+  });
+
   it("returns customer bookings by guest email", async () => {
     const server = buildServer();
     await server.inject({

@@ -1066,6 +1066,67 @@ h2 {
   font-size: 16px;
 }
 
+.room-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.room-editor h2 {
+  font-size: 16px;
+}
+
+.room-editor-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.room-editor-card {
+  display: grid;
+  gap: 10px;
+  border-radius: 8px;
+  background: #fbf6f0;
+  padding: 12px;
+}
+
+.room-editor-card h3 {
+  font-size: 15px;
+}
+
+.room-editor-card strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.room-editor-card label {
+  display: grid;
+  gap: 6px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.room-editor-card input,
+.room-editor-card select,
+.room-editor-card textarea {
+  width: 100%;
+  border: 1px solid #dccfc0;
+  border-radius: 8px;
+  background: #fff;
+  color: #191714;
+  font: inherit;
+  font-weight: 600;
+  padding: 10px;
+}
+
+.room-editor-card textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
 .media-grid {
   display: grid;
   grid-template-columns: 1fr;

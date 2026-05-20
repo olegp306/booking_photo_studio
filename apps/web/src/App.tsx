@@ -35,6 +35,7 @@ import {
   type ShootType,
   type Studio,
   type StudioImage,
+  type StudioRoom,
   type StudioSearchFilters
 } from "@studio-market/shared";
 import {
@@ -1570,6 +1571,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [equipmentIds, setEquipmentIds] = useState<EquipmentId[]>(studio.equipmentIds);
   const [amenityIds, setAmenityIds] = useState<AmenityId[]>(studio.amenityIds);
   const [images, setImages] = useState<StudioImage[]>(studio.images);
+  const [rooms, setRooms] = useState<StudioRoom[]>(studio.rooms);
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaCaption, setMediaCaption] = useState("");
   const [mediaKind, setMediaKind] = useState<StudioImage["kind"]>("room");
@@ -1586,6 +1588,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setEquipmentIds(studio.equipmentIds);
     setAmenityIds(studio.amenityIds);
     setImages(studio.images);
+    setRooms(studio.rooms);
     setRules(studio.rules.join("\n"));
   }, [studio]);
 
@@ -1624,6 +1627,10 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     );
   };
 
+  const updateRoom = (roomId: string, updates: Partial<Pick<StudioRoom, "summary" | "pricePerHour" | "bookingMode">>) => {
+    setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, ...updates } : room)));
+  };
+
   const addMedia = () => {
     const trimmedUrl = mediaUrl.trim();
     const trimmedCaption = mediaCaption.trim();
@@ -1660,6 +1667,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       equipmentIds,
       amenityIds,
       images,
+      rooms,
       rules: updatedRules
     });
     setSaved(true);
@@ -1814,6 +1822,49 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
                 );
               })}
             </div>
+          </div>
+        </section>
+        <section className="room-editor" aria-label="Room pricing editor">
+          <h2>Rooms and pricing</h2>
+          <div className="room-editor-grid">
+            {rooms.map((room) => (
+              <article className="room-editor-card" key={room.id}>
+                <div>
+                  <p className="eyebrow">{room.areaSqm} sqm - {room.ceilingHeightM} m ceiling</p>
+                  <h3>{room.name}</h3>
+                  <strong>{money(room.pricePerHour, studio.currency)} / hour</strong>
+                </div>
+                <label>
+                  {room.name} summary
+                  <textarea
+                    value={room.summary}
+                    onChange={(event) => updateRoom(room.id, { summary: event.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  {room.name} hourly price
+                  <input
+                    min="1"
+                    type="number"
+                    value={room.pricePerHour}
+                    onChange={(event) => updateRoom(room.id, { pricePerHour: Number(event.target.value) })}
+                    required
+                  />
+                </label>
+                <label>
+                  {room.name} booking mode
+                  <select
+                    value={room.bookingMode}
+                    onChange={(event) => updateRoom(room.id, { bookingMode: event.target.value as BookingMode })}
+                  >
+                    <option value="hybrid">Hybrid</option>
+                    <option value="request">Request</option>
+                    <option value="instant">Instant</option>
+                  </select>
+                </label>
+              </article>
+            ))}
           </div>
         </section>
         <section className="media-editor" aria-label="Studio media library">

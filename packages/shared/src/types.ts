@@ -222,4 +222,5 @@ export interface OwnerListingUpdate {
   amenityIds?: AmenityId[];
   rules?: string[];
   images?: StudioImage[];
+  rooms?: StudioRoom[];
 }
