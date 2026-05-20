@@ -12,6 +12,7 @@ import {
   seedStudios,
   taxonomy,
   type AmenityId,
+  type AvailabilitySlot,
   type BookingMode,
   type BookingIntent,
   type BookingIntentRequest,
@@ -52,6 +53,11 @@ export const buildServer = () => {
   const availabilityBlocks: OwnerAvailabilityBlock[] = [];
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
+  const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
+    block.studioSlug === slot.studioSlug &&
+    block.roomId === slot.roomId &&
+    block.date === slot.date &&
+    (block.startTime === slot.startTime || block.startTime === "full-day");
 
   app.register(cors, {
     origin: true
@@ -129,13 +135,7 @@ export const buildServer = () => {
           ...slot,
           available:
             slot.available &&
-            !availabilityBlocks.some(
-              (block) =>
-                block.studioSlug === slot.studioSlug &&
-                block.roomId === slot.roomId &&
-                block.date === slot.date &&
-                block.startTime === slot.startTime
-            )
+            !availabilityBlocks.some((block) => isBlockedSlot(block, slot))
         }))
       }
     };

@@ -107,6 +107,47 @@ describe("studio API", () => {
     );
   });
 
+  it("lets owners close a room for a full day", async () => {
+    const server = buildServer();
+    const block = await server.inject({
+      method: "POST",
+      url: "/owner/availability-blocks",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "full-day",
+        reason: "Private production"
+      }
+    });
+
+    expect(block.statusCode).toBe(201);
+    expect(block.json().block).toEqual(
+      expect.objectContaining({
+        startTime: "full-day",
+        reason: "Private production"
+      })
+    );
+
+    const availability = await server.inject({
+      method: "GET",
+      url: "/studios/studio-lumen-karlin/availability?date=2026-06-12"
+    });
+    const mainRoomSlots = availability
+      .json()
+      .availability.slots.filter((slot: { roomId: string }) => slot.roomId === "lumen-main");
+    const productRoomSlot = availability
+      .json()
+      .availability.slots.find((slot: { roomId: string; startTime: string }) => slot.roomId === "lumen-product" && slot.startTime === "09:00");
+
+    expect(mainRoomSlots.every((slot: { available: boolean }) => !slot.available)).toBe(true);
+    expect(productRoomSlot).toEqual(
+      expect.objectContaining({
+        available: true
+      })
+    );
+  });
+
   it("lets owners release a blocked availability slot", async () => {
     const server = buildServer();
     await server.inject({

@@ -497,6 +497,18 @@ h2 {
   resize: vertical;
 }
 
+.booking-form .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.booking-form .checkbox-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: #191714;
+}
+
 .request-button {
   border: 0;
   border-radius: 999px;

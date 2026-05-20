@@ -8,6 +8,7 @@ import {
   markBookingPaid,
   searchStudios,
   seedStudios,
+  type AvailabilitySlot,
   type BookingIntent,
   type BookingIntentRequest,
   type OwnerAvailabilityBlock,
@@ -27,6 +28,12 @@ const localShortlists = new Map<string, SharedShortlist>();
 const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
 let localShortlistCount = 0;
 let localAvailabilityBlockCount = 0;
+
+const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
+  block.studioSlug === slot.studioSlug &&
+  block.roomId === slot.roomId &&
+  block.date === slot.date &&
+  (block.startTime === slot.startTime || block.startTime === "full-day");
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {
   const params = new URLSearchParams();
@@ -64,13 +71,7 @@ export const loadAvailability = async (studio: Studio, date: string): Promise<St
         ...slot,
         available:
           slot.available &&
-          !localAvailabilityBlocks.some(
-            (block) =>
-              block.studioSlug === slot.studioSlug &&
-              block.roomId === slot.roomId &&
-              block.date === slot.date &&
-              block.startTime === slot.startTime
-          )
+          !localAvailabilityBlocks.some((block) => isBlockedSlot(block, slot))
       }))
     };
   }

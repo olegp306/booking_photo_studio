@@ -67,6 +67,12 @@ const accessibleMoney = (amount: number, currency: string) =>
     maximumFractionDigits: 0
   }).format(amount)}`;
 
+const addDays = (dateValue: string, days: number) => {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
 const selectedFeatures: FeatureId[] = ["natural-light", "cyclorama", "blackout", "bedroom-set"];
 const shootTypes: ShootType[] = ["portrait", "fashion", "maternity", "product", "video", "content"];
 const shootTypeOptions = Object.entries(shootTypeLabels) as Array<[ShootType, string]>;
@@ -1263,6 +1269,8 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
   const [roomId, setRoomId] = useState(studio.rooms[0]?.id ?? "");
   const [date, setDate] = useState("2026-06-12");
   const [startTime, setStartTime] = useState("09:00");
+  const [isFullDay, setIsFullDay] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [reason, setReason] = useState("");
   const [blocks, setBlocks] = useState<OwnerAvailabilityBlock[]>([]);
   const selectedRoom = studio.rooms.find((room) => room.id === roomId) ?? studio.rooms[0];
@@ -1271,14 +1279,18 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
     event.preventDefault();
     if (!selectedRoom) return;
 
-    const block = await onBlockAvailability({
-      studioSlug: studio.slug,
-      roomId: selectedRoom.id,
-      date,
-      startTime,
-      reason: reason.trim() || "Owner hold"
-    });
-    setBlocks((current) => [block, ...current]);
+    const nextBlocks = await Promise.all(
+      Array.from({ length: repeatWeeks }, (_, index) =>
+        onBlockAvailability({
+          studioSlug: studio.slug,
+          roomId: selectedRoom.id,
+          date: addDays(date, index * 7),
+          startTime: isFullDay ? "full-day" : startTime,
+          reason: reason.trim() || "Owner hold"
+        })
+      )
+    );
+    setBlocks((current) => [...nextBlocks.reverse(), ...current]);
     setReason("");
   };
 
@@ -1315,12 +1327,24 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
         </label>
         <label>
           Start time
-          <select value={startTime} onChange={(event) => setStartTime(event.target.value)}>
+          <select disabled={isFullDay} value={startTime} onChange={(event) => setStartTime(event.target.value)}>
             {["09:00", "11:00", "13:00", "15:00"].map((time) => (
               <option key={time} value={time}>
                 {time}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="checkbox-row">
+          <input checked={isFullDay} onChange={(event) => setIsFullDay(event.target.checked)} type="checkbox" />
+          Full-day closure
+        </label>
+        <label>
+          Repeat
+          <select value={repeatWeeks} onChange={(event) => setRepeatWeeks(Number(event.target.value))}>
+            <option value={1}>Does not repeat</option>
+            <option value={2}>Weekly for 2 weeks</option>
+            <option value={4}>Weekly for 4 weeks</option>
           </select>
         </label>
         <label>
@@ -1334,20 +1358,21 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
 
       {blocks.map((block) => {
         const room = studio.rooms.find((candidate) => candidate.id === block.roomId);
+        const blockLabel = block.startTime === "full-day" ? "Full day" : block.startTime;
         return (
           <article className="owner-request" key={block.id}>
             <div className="owner-request-head">
               <div>
                 <p className="eyebrow">{block.date}</p>
                 <h2>
-                  {block.startTime} {room?.name ?? "Room"} blocked.
+                  {blockLabel} {room?.name ?? "Room"} blocked.
                 </h2>
               </div>
               <span className="status-pill">Blocked</span>
             </div>
             <p className="owner-message">{block.reason}</p>
             <button
-              aria-label={`Release ${block.startTime} ${room?.name ?? "Room"} block`}
+              aria-label={`Release ${blockLabel} ${room?.name ?? "Room"} block`}
               className="secondary-button"
               onClick={() => releaseBlock(block)}
               type="button"

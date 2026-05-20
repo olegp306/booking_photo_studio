@@ -370,6 +370,41 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "11:00 Main Daylight Room CZK 2,600" })).toBeEnabled();
   });
 
+  it("lets owners close a room for a full day", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.click(screen.getByLabelText("Full-day closure"));
+    await user.type(screen.getByLabelText("Block reason"), "Private production");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+
+    expect(await screen.findByText("Full day Main Daylight Room blocked.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to explore" }));
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+
+    expect(await screen.findByRole("button", { name: "09:00 Main Daylight Room CZK 2,600 unavailable" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "11:00 Main Daylight Room CZK 2,600 unavailable" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "09:00 Product Corner CZK 1,400" })).toBeEnabled();
+  });
+
+  it("lets owners create weekly recurring availability holds", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.selectOptions(screen.getByLabelText("Start time"), "13:00");
+    await user.selectOptions(screen.getByLabelText("Repeat"), "2");
+    await user.type(screen.getByLabelText("Block reason"), "Set build");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+
+    expect(await screen.findAllByText("13:00 Main Daylight Room blocked.")).toHaveLength(2);
+    expect(screen.getByText("2026-06-19")).toBeInTheDocument();
+  });
+
   it("creates an AI listing draft from owner notes", async () => {
     const user = userEvent.setup();
     render(<App />);
