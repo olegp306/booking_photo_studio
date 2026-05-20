@@ -647,6 +647,52 @@ h2 {
   font-size: 13px;
 }
 
+.telegram-draft-shell {
+  background: #fffaf4;
+}
+
+.telegram-draft-hero {
+  display: grid;
+  gap: 16px;
+}
+
+.telegram-draft-list {
+  gap: 12px;
+}
+
+.telegram-draft-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.telegram-draft-card h2 {
+  font-size: 19px;
+}
+
+.telegram-draft-card p {
+  color: #6e6259;
+  line-height: 1.45;
+}
+
+.detected-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detected-filter-row span {
+  border-radius: 999px;
+  background: #f6efe7;
+  color: #3b332d;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .owner-tabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

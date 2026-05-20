@@ -52,10 +52,12 @@ export interface LaunchReadiness {
 export interface ImportedListingDraft {
   id: string;
   source: "telegram";
+  chatId?: number | string;
   transcript: string;
   mode: ImportedDraftMode;
   draft: ListingDraft;
   createdAt: string;
+  openEditorUrl?: string;
 }
 
 export interface TelegramWebhookSetupResult {
@@ -159,6 +161,20 @@ export const loadOwnerListingDrafts = async (): Promise<ImportedListingDraft[]> 
   try {
     const response = await fetch(`${API_BASE}/owner/listing-drafts`);
     if (!response.ok) throw new Error("Failed to load imported listing drafts");
+    const payload = (await response.json()) as { drafts: ImportedListingDraft[] };
+    return payload.drafts;
+  } catch {
+    return [];
+  }
+};
+
+export const loadTelegramMiniAppDrafts = async (chatId?: string): Promise<ImportedListingDraft[]> => {
+  const params = new URLSearchParams();
+  if (chatId) params.set("chatId", chatId);
+
+  try {
+    const response = await fetch(`${API_BASE}/integrations/telegram/mini-app/drafts?${params.toString()}`);
+    if (!response.ok) throw new Error("Failed to load Telegram Mini App drafts");
     const payload = (await response.json()) as { drafts: ImportedListingDraft[] };
     return payload.drafts;
   } catch {

@@ -48,6 +48,8 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Owner listing editor import panel for applying Telegram drafts to the public studio profile.
 - Imported Telegram owner drafts can persist to local JSON storage through `LOCAL_DATA_DIR`.
 - Launch readiness can register the Telegram owner bot webhook from the UI when bot and public URL env values are present.
+- Telegram Mini App draft inbox at `#telegram-drafts` for reviewing imported owner drafts on mobile.
+- Telegram bot replies now deep-link owners into the draft inbox before opening the full listing editor.
 
 ## Local Launch Env
 
@@ -68,10 +70,9 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
 3. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
-4. Connect Telegram Mini App entry points for browsing imported drafts and opening the web editor.
-5. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
-6. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
-7. Add authentication and durable database storage for shared shortlists, comments, and decisions.
-8. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
-9. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
-10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.
+4. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
+5. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
+6. Add authentication and durable database storage for shared shortlists, comments, and decisions.
+7. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
+8. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
+9. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

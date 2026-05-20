@@ -67,7 +67,7 @@ export const sendTelegramListingDraftReply = async (
       text: [
         "Listing draft ready.",
         `Draft: ${record.draft.tagline}`,
-        `Open owner dashboard: ${(config.publicAppUrl || "http://localhost:5173").replace(/\/$/, "")}/#profile`
+        `Open Telegram draft inbox: ${(config.publicAppUrl || "http://localhost:5173").replace(/\/$/, "")}/#telegram-drafts`
       ].join("\n")
     })
   });

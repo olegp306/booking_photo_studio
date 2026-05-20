@@ -54,6 +54,7 @@ import {
   loadOwnerBookings,
   loadSharedShortlist,
   loadStudios,
+  loadTelegramMiniAppDrafts,
   releaseOwnerAvailabilityBlock,
   setupTelegramWebhook,
   submitBookingReview,
@@ -101,6 +102,8 @@ const mediaKindLabels: Record<StudioImage["kind"], string> = {
   equipment: "Equipment and props"
 };
 type AppView = "explore" | "saved" | "bookings" | "host";
+type ExtendedAppView = AppView | "telegram-drafts";
+type OwnerDashboardTab = "requests" | "calendar" | "listing" | "launch";
 type BookingMessageAuthor = "guest" | "studio";
 
 interface BookingMessage {
@@ -116,7 +119,8 @@ const shortlistDecisionLabels: Record<ShortlistDecision, string> = {
   rejected: "Rejected"
 };
 
-const initialViewFromHash = (): AppView => {
+const initialViewFromHash = (): ExtendedAppView => {
+  if (window.location.hash.startsWith("#telegram-drafts")) return "telegram-drafts";
   if (window.location.hash === "#saved" || window.location.hash.startsWith("#saved/")) return "saved";
   if (window.location.hash.startsWith("#shortlist/")) return "saved";
   if (window.location.hash === "#bookings") return "bookings";
@@ -150,7 +154,7 @@ export const App = () => {
   const [activeFeature, setActiveFeature] = useState<FeatureId | undefined>();
   const [selectedStudio, setSelectedStudio] = useState<Studio | undefined>();
   const [saved, setSaved] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<AppView>(initialViewFromHash);
+  const [view, setView] = useState<ExtendedAppView>(initialViewFromHash);
   const [ownerBookings, setOwnerBookings] = useState<BookingIntent[]>([]);
   const [customerBookings, setCustomerBookings] = useState<BookingIntent[]>([]);
   const [bookingMessages, setBookingMessages] = useState<Record<string, BookingMessage[]>>({});
@@ -158,6 +162,7 @@ export const App = () => {
   const [hashVersion, setHashVersion] = useState(0);
   const [shortlistItems, setShortlistItems] = useState<Record<string, SharedShortlistItem>>({});
   const [activeShortlistId, setActiveShortlistId] = useState<string | undefined>();
+  const [ownerInitialTab, setOwnerInitialTab] = useState<OwnerDashboardTab>("requests");
 
   const filters: StudioSearchFilters = useMemo(
     () => ({
@@ -177,6 +182,13 @@ export const App = () => {
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  useEffect(() => {
+    if (window.location.hash.startsWith("#telegram-drafts")) {
+      setSelectedStudio(undefined);
+      setView("telegram-drafts");
+    }
+  }, [hashVersion]);
 
   useEffect(() => {
     const sharedStudioSlug = studioSlugFromHash();
@@ -373,6 +385,7 @@ export const App = () => {
         onBackToExplore={() => setView("explore")}
         onOpenSaved={() => setView("saved")}
         onOpenBookings={() => setView("bookings")}
+        initialTab={ownerInitialTab}
         studio={studios[0]}
         onDecideBooking={async (booking, decision) => {
           const updated = await decideOwnerBooking(booking, decision);
@@ -391,6 +404,19 @@ export const App = () => {
           const updated = await updateOwnerListing(studio, updates);
           setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
           return updated;
+        }}
+      />
+    );
+  }
+
+  if (view === "telegram-drafts") {
+    return (
+      <TelegramDraftInbox
+        onBackToExplore={() => setView("explore")}
+        onOpenEditor={() => {
+          window.location.hash = "profile";
+          setOwnerInitialTab("listing");
+          setView("host");
         }}
       />
     );
@@ -782,6 +808,7 @@ interface OwnerDashboardProps {
   bookings: BookingIntent[];
   messages: Record<string, BookingMessage[]>;
   studio?: Studio;
+  initialTab?: OwnerDashboardTab;
   onBackToExplore: () => void;
   onOpenSaved: () => void;
   onOpenBookings: () => void;
@@ -804,6 +831,87 @@ const statusLabel = (status: BookingIntent["status"]) => {
   };
 
   return labels[status];
+};
+
+interface TelegramDraftInboxProps {
+  onBackToExplore: () => void;
+  onOpenEditor: () => void;
+}
+
+const TelegramDraftInbox = ({ onBackToExplore, onOpenEditor }: TelegramDraftInboxProps) => {
+  const [drafts, setDrafts] = useState<ImportedListingDraft[]>([]);
+
+  useEffect(() => {
+    loadTelegramMiniAppDrafts().then(setDrafts);
+  }, []);
+
+  return (
+    <main className="app-shell telegram-draft-shell">
+      <section className="hero-band telegram-draft-hero">
+        <div className="top-bar">
+          <div>
+            <p className="eyebrow">Telegram owner bot</p>
+            <h1>Telegram studio drafts</h1>
+          </div>
+          <button aria-label="Back to explore" className="icon-button" onClick={onBackToExplore} type="button">
+            <Search size={20} />
+          </button>
+        </div>
+        <div className="owner-summary">
+          <Sparkles size={20} />
+          <div>
+            <strong>Review imported drafts</strong>
+            <span>Open a parsed studio draft in the owner editor, refine it, and publish from the web app.</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="owner-list telegram-draft-list" aria-label="Telegram studio drafts">
+        {drafts.length === 0 ? (
+          <div className="empty-state">
+            <h2>No Telegram drafts yet</h2>
+            <p>Send studio notes to the Telegram bot, then come back here to review the parsed listing.</p>
+          </div>
+        ) : (
+          drafts.map((draft) => (
+            <article className="telegram-draft-card" key={draft.id}>
+              <div>
+                <p className="eyebrow">{draft.id}</p>
+                <h2>{draft.draft.tagline}</h2>
+              </div>
+              <p>{draft.draft.description}</p>
+              <div className="detected-filter-row" aria-label={`Detected filters for ${draft.id}`}>
+                {draft.draft.shootTypes.map((shootType) => (
+                  <span key={shootType}>{shootTypeLabels[shootType]}</span>
+                ))}
+                {draft.draft.featureIds.map((featureId) => (
+                  <span key={featureId}>{featureLabels[featureId]}</span>
+                ))}
+              </div>
+              <button className="payment-button" onClick={onOpenEditor} type="button">
+                Open draft {draft.id} in editor
+              </button>
+            </article>
+          ))
+        )}
+      </section>
+
+      <nav className="bottom-nav" aria-label="Primary navigation">
+        <a href="#explore" onClick={onBackToExplore}>
+          <Search size={19} />
+          Explore
+        </a>
+        <a className="active" href="#telegram-drafts">
+          <Sparkles size={19} />
+          Drafts
+        </a>
+        <a href="#profile" onClick={onOpenEditor}>
+          <Home size={19} />
+          Host
+        </a>
+      </nav>
+    </main>
+  );
 };
 
 interface CustomerBookingsProps {
@@ -1233,6 +1341,7 @@ const OwnerDashboard = ({
   bookings,
   messages,
   studio,
+  initialTab = "requests",
   onBackToExplore,
   onOpenSaved,
   onOpenBookings,
@@ -1243,7 +1352,7 @@ const OwnerDashboard = ({
   onReleaseAvailability,
   onUpdateListing
 }: OwnerDashboardProps) => {
-  const [activeTab, setActiveTab] = useState<"requests" | "calendar" | "listing" | "launch">("requests");
+  const [activeTab, setActiveTab] = useState<OwnerDashboardTab>(initialTab);
   const ownerTitle =
     activeTab === "requests"
       ? "Owner inbox"

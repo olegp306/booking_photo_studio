@@ -163,6 +163,28 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     drafts: await listingDraftStore.list()
   }));
 
+  app.get<{
+    Querystring: {
+      chatId?: string;
+    };
+  }>("/integrations/telegram/mini-app/drafts", async (request) => {
+    const publicAppUrl = (config.publicAppUrl || "http://localhost:5173").replace(/\/$/, "");
+    const drafts = await listingDraftStore.list();
+    const chatDrafts = request.query.chatId
+      ? drafts.filter((draft) => String(draft.chatId) === request.query.chatId)
+      : drafts;
+
+    return {
+      ok: true,
+      webAppUrl: `${publicAppUrl}/#telegram-drafts`,
+      editorUrl: `${publicAppUrl}/#profile`,
+      drafts: chatDrafts.map((draft) => ({
+        ...draft,
+        openEditorUrl: `${publicAppUrl}/#profile`
+      }))
+    };
+  });
+
   app.post("/integrations/telegram/webhook", async (_request, reply) => {
     const missing = [
       !config.telegramBotToken?.trim() && "TELEGRAM_BOT_TOKEN",

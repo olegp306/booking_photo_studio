@@ -193,7 +193,7 @@ describe("studio API", () => {
     expect(JSON.parse(String(telegramRequests[0].init?.body))).toEqual(
       expect.objectContaining({
         chat_id: 123,
-        text: expect.stringContaining("https://studio.example.com/#profile")
+        text: expect.stringContaining("https://studio.example.com/#telegram-drafts")
       })
     );
 
@@ -210,6 +210,56 @@ describe("studio API", () => {
         transcript: "Soft daylight studio for fashion shoots with cyclorama and softboxes"
       })
     ]);
+  });
+
+  it("returns Telegram Mini App drafts for the owner chat", async () => {
+    const server = buildServer({
+      config: {
+        publicAppUrl: "https://studio.example.com"
+      }
+    });
+    await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/listing-draft",
+      payload: {
+        message: {
+          chat: { id: 789 },
+          text: "Warm portrait studio with paper backdrops, makeup station, and wifi"
+        }
+      }
+    });
+    await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/listing-draft",
+      payload: {
+        message: {
+          chat: { id: 999 },
+          text: "Different owner studio"
+        }
+      }
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/integrations/telegram/mini-app/drafts?chatId=789"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        ok: true,
+        webAppUrl: "https://studio.example.com/#telegram-drafts",
+        editorUrl: "https://studio.example.com/#profile",
+        drafts: [
+          expect.objectContaining({
+            id: "telegram-draft-1",
+            chatId: 789,
+            transcript: "Warm portrait studio with paper backdrops, makeup station, and wifi",
+            openEditorUrl: "https://studio.example.com/#profile"
+          })
+        ]
+      })
+    );
   });
 
   it("persists imported Telegram listing drafts across API restarts", async () => {

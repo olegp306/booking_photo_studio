@@ -742,6 +742,52 @@ describe("App", () => {
     expect(screen.getByDisplayValue("Minimum booking is 2 hours.")).toBeInTheDocument();
   });
 
+  it("opens Telegram Mini App drafts and links owners to the editor", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#telegram-drafts";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/integrations/telegram/mini-app/drafts")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            webAppUrl: "https://studio.example.com/#telegram-drafts",
+            editorUrl: "https://studio.example.com/#profile",
+            drafts: [
+              {
+                id: "telegram-draft-8",
+                source: "telegram",
+                transcript: "Telegram mini app text",
+                createdAt: "2026-05-20T11:00:00.000Z",
+                openEditorUrl: "https://studio.example.com/#profile",
+                draft: {
+                  tagline: "Mini app daylight portrait studio.",
+                  description: "Mini app owner draft with backdrops and makeup station.",
+                  shootTypes: ["portrait"],
+                  featureIds: ["natural-light", "paper-backdrops"],
+                  equipmentIds: ["softboxes"],
+                  amenityIds: ["makeup-station"],
+                  rules: ["Minimum booking is 2 hours."]
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Telegram studio drafts" })).toBeInTheDocument();
+    expect(screen.getByText("Mini app daylight portrait studio.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open draft telegram-draft-8 in editor" }));
+
+    expect(await screen.findByRole("heading", { name: "Manage listing" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#profile");
+  });
+
   it("lets owners manually refine AI-detected listing filters", async () => {
     const user = userEvent.setup();
     render(<App />);
