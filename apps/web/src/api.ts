@@ -244,7 +244,8 @@ export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUp
       rooms: updates.rooms ?? studio.rooms,
       props: updates.props ?? studio.props,
       accessNotes: updates.accessNotes ?? studio.accessNotes,
-      cancellationPolicy: updates.cancellationPolicy ?? studio.cancellationPolicy
+      cancellationPolicy: updates.cancellationPolicy ?? studio.cancellationPolicy,
+      listingStatus: updates.listingStatus ?? studio.listingStatus
     };
   }
 };

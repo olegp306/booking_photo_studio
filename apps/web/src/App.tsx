@@ -28,6 +28,7 @@ import {
   type AmenityId,
   type EquipmentId,
   type FeatureId,
+  type ListingStatus,
   type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type SharedShortlistItem,
@@ -68,6 +69,12 @@ const accessibleMoney = (amount: number, currency: string) =>
   `${currency} ${new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0
   }).format(amount)}`;
+
+const listingStatusLabels: Record<ListingStatus, string> = {
+  draft: "Draft",
+  in_review: "In review",
+  published: "Published"
+};
 
 const addDays = (dateValue: string, days: number) => {
   const date = new Date(`${dateValue}T00:00:00.000Z`);
@@ -581,10 +588,13 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
             <p className="eyebrow">{studio.addressHint}</p>
             <h1>{studio.name}</h1>
           </div>
-          <span className="rating large">
-            <Star size={16} fill="currentColor" />
-            {studio.rating}
-          </span>
+          <div className="detail-title-meta">
+            <span className="status-pill">{listingStatusLabels[studio.listingStatus]}</span>
+            <span className="rating large">
+              <Star size={16} fill="currentColor" />
+              {studio.rating}
+            </span>
+          </div>
         </div>
 
         <p className="description">{studio.description}</p>
@@ -1591,6 +1601,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [cancellationPolicy, setCancellationPolicy] = useState(studio.cancellationPolicy);
   const [rules, setRules] = useState(studio.rules.join("\n"));
   const [saved, setSaved] = useState(false);
+  const [submittedForReview, setSubmittedForReview] = useState(false);
 
   useEffect(() => {
     setTagline(studio.tagline);
@@ -1697,6 +1708,14 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setSaved(true);
   };
 
+  const submitForReview = async () => {
+    await onUpdateListing(studio, {
+      listingStatus: "in_review"
+    });
+    setSaved(false);
+    setSubmittedForReview(true);
+  };
+
   return (
     <section className="owner-list listing-editor" aria-label="Owner listing editor">
       <article className="listing-preview">
@@ -1722,6 +1741,28 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
           <span><Check size={15} /> Equipment list</span>
           <span><Check size={15} /> House rules</span>
         </div>
+      </article>
+
+      <article className="listing-status-panel">
+        <div>
+          <p className="eyebrow">Moderation status</p>
+          <h2>{listingStatusLabels[studio.listingStatus]}</h2>
+          <p>
+            {studio.listingStatus === "draft"
+              ? "Keep editing, then send the profile for marketplace review."
+              : studio.listingStatus === "in_review"
+                ? "The profile is queued for admin review before publishing."
+                : "The profile is visible in marketplace search and detail pages."}
+          </p>
+        </div>
+        <button
+          className="secondary-button"
+          disabled={studio.listingStatus === "in_review"}
+          onClick={submitForReview}
+          type="button"
+        >
+          Submit listing for review
+        </button>
       </article>
 
       <article className="ai-draft-panel">
@@ -1996,6 +2037,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       </form>
 
       {saved && <p className="booking-status">Listing updated.</p>}
+      {submittedForReview && <p className="booking-status">Listing submitted for review.</p>}
     </section>
   );
 };

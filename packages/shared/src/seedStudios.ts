@@ -23,6 +23,7 @@ export const seedStudios: Studio[] = [
     currency: "CZK",
     bookingMode: "hybrid",
     ownerName: "Lumen Studios",
+    listingStatus: "draft",
     tagline: "Bright daylight studio with cyclorama and soft neutral interiors.",
     description:
       "A flexible daylight studio for portraits, fashion editorials, content days, and small product shoots. The main room has large industrial windows, a white cyclorama, and included modifiers.",
@@ -99,6 +100,7 @@ export const seedStudios: Studio[] = [
     currency: "CZK",
     bookingMode: "request",
     ownerName: "Atelier Rosa",
+    listingStatus: "published",
     tagline: "Warm lifestyle apartment studio for portraits, maternity, and family shoots.",
     description:
       "A cozy apartment-like studio with bedroom and living-room sets, textured walls, soft daylight, and calm colors for client-friendly sessions.",
@@ -162,6 +164,7 @@ export const seedStudios: Studio[] = [
     currency: "CZK",
     bookingMode: "instant",
     ownerName: "Framehouse",
+    listingStatus: "published",
     tagline: "Production-ready studio with blackout, projector, smoke machine, and loading access.",
     description:
       "A practical studio for commercial photo and video production, with controlled light, production equipment, and easy load-in.",

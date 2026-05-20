@@ -359,6 +359,13 @@ h2 {
   font-size: 26px;
 }
 
+.detail-title-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .large {
   flex: 0 0 auto;
   font-weight: 800;
@@ -848,6 +855,29 @@ h2 {
   padding: 9px;
   font-size: 13px;
   font-weight: 800;
+}
+
+.listing-status-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.listing-status-panel h2 {
+  font-size: 18px;
+}
+
+.listing-status-panel p {
+  color: #6e6259;
+  line-height: 1.4;
+}
+
+.listing-status-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .listing-form {

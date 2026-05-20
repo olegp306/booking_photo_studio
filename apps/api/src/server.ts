@@ -456,7 +456,8 @@ export const buildServer = () => {
       rooms: request.body.rooms ?? current.rooms,
       props: request.body.props ?? current.props,
       accessNotes: request.body.accessNotes ?? current.accessNotes,
-      cancellationPolicy: request.body.cancellationPolicy ?? current.cancellationPolicy
+      cancellationPolicy: request.body.cancellationPolicy ?? current.cancellationPolicy,
+      listingStatus: request.body.listingStatus ?? current.listingStatus
     };
     studios[studioIndex] = updated;
 

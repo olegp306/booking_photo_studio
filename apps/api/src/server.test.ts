@@ -448,6 +448,24 @@ describe("studio API", () => {
     );
   });
 
+  it("lets owners submit a listing for review", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/owner/studios/studio-lumen-karlin",
+      payload: {
+        listingStatus: "in_review"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().studio).toEqual(
+      expect.objectContaining({
+        listingStatus: "in_review"
+      })
+    );
+  });
+
   it("returns customer bookings by guest email", async () => {
     const server = buildServer();
     await server.inject({

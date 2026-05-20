@@ -1,4 +1,5 @@
 export type BookingMode = "instant" | "request" | "hybrid";
+export type ListingStatus = "draft" | "in_review" | "published";
 
 export type ShootType =
   | "portrait"
@@ -88,6 +89,7 @@ export interface Studio {
   currency: City["currency"];
   bookingMode: BookingMode;
   ownerName: string;
+  listingStatus: ListingStatus;
   tagline: string;
   description: string;
   moodTags: string[];
@@ -229,4 +231,5 @@ export interface OwnerListingUpdate {
   props?: string[];
   accessNotes?: string;
   cancellationPolicy?: string;
+  listingStatus?: ListingStatus;
 }

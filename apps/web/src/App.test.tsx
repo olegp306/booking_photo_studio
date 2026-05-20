@@ -374,6 +374,20 @@ describe("App", () => {
     expect(screen.getAllByText("Free cancellation until 48 hours before the booking.").length).toBeGreaterThan(0);
   });
 
+  it("lets owners submit a listing for review", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Submit listing for review" }));
+
+    expect(await screen.findByText("In review")).toBeInTheDocument();
+    expect(screen.getByText("Listing submitted for review.")).toBeInTheDocument();
+  });
+
   it("lets owners block calendar slots from booking", async () => {
     const user = userEvent.setup();
     render(<App />);
