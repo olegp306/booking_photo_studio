@@ -276,6 +276,23 @@ describe("App", () => {
     expect(screen.getByText("Soft editorial loft for portraits")).toBeInTheDocument();
   });
 
+  it("lets owners block calendar slots from booking", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.type(screen.getByLabelText("Block reason"), "Maintenance");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+
+    expect(await screen.findByText("09:00 Main Daylight Room blocked.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to explore" }));
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+
+    expect(await screen.findByRole("button", { name: "09:00 Main Daylight Room CZK 2,600 unavailable" })).toBeDisabled();
+  });
+
   it("creates an AI listing draft from owner notes", async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -65,6 +65,48 @@ describe("studio API", () => {
     );
   });
 
+  it("lets owners block a slot from public availability", async () => {
+    const server = buildServer();
+    const block = await server.inject({
+      method: "POST",
+      url: "/owner/availability-blocks",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00",
+        reason: "Maintenance"
+      }
+    });
+
+    expect(block.statusCode).toBe(201);
+    expect(block.json().block).toEqual(
+      expect.objectContaining({
+        id: "block-1",
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00",
+        reason: "Maintenance"
+      })
+    );
+
+    const availability = await server.inject({
+      method: "GET",
+      url: "/studios/studio-lumen-karlin/availability?date=2026-06-12"
+    });
+
+    expect(
+      availability
+        .json()
+        .availability.slots.find((slot: { roomId: string; startTime: string }) => slot.roomId === "lumen-main" && slot.startTime === "09:00")
+    ).toEqual(
+      expect.objectContaining({
+        available: false
+      })
+    );
+  });
+
   it("creates booking requests with hybrid status logic", async () => {
     const server = buildServer();
     const response = await server.inject({

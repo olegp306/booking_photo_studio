@@ -155,6 +155,15 @@ export interface StudioAvailability {
   slots: AvailabilitySlot[];
 }
 
+export interface OwnerAvailabilityBlock {
+  id: string;
+  studioSlug: string;
+  roomId: string;
+  date: string;
+  startTime: string;
+  reason: string;
+}
+
 export interface BookingIntentRequest {
   roomId: string;
   date: string;

@@ -7,6 +7,7 @@ import {
   seedStudios,
   type BookingIntent,
   type BookingIntentRequest,
+  type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
   type SharedShortlist,
@@ -18,7 +19,9 @@ import {
 
 const API_BASE = "/api";
 const localShortlists = new Map<string, SharedShortlist>();
+const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
 let localShortlistCount = 0;
+let localAvailabilityBlockCount = 0;
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {
   const params = new URLSearchParams();
@@ -49,7 +52,22 @@ export const loadAvailability = async (studio: Studio, date: string): Promise<St
     const payload = (await response.json()) as { availability: StudioAvailability };
     return payload.availability;
   } catch {
-    return getAvailabilityForStudio(studio, date);
+    const availability = getAvailabilityForStudio(studio, date);
+    return {
+      ...availability,
+      slots: availability.slots.map((slot) => ({
+        ...slot,
+        available:
+          slot.available &&
+          !localAvailabilityBlocks.some(
+            (block) =>
+              block.studioSlug === slot.studioSlug &&
+              block.roomId === slot.roomId &&
+              block.date === slot.date &&
+              block.startTime === slot.startTime
+          )
+      }))
+    };
   }
 };
 
@@ -154,6 +172,31 @@ export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUp
       rules: updates.rules ?? studio.rules,
       images: updates.images ?? studio.images
     };
+  }
+};
+
+export const createOwnerAvailabilityBlock = async (
+  block: Omit<OwnerAvailabilityBlock, "id">
+): Promise<OwnerAvailabilityBlock> => {
+  try {
+    const response = await fetch(`${API_BASE}/owner/availability-blocks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(block)
+    });
+    if (!response.ok) throw new Error("Failed to block availability");
+    const payload = (await response.json()) as { block: OwnerAvailabilityBlock };
+    return payload.block;
+  } catch {
+    localAvailabilityBlockCount += 1;
+    const blocked: OwnerAvailabilityBlock = {
+      id: `block-${localAvailabilityBlockCount}`,
+      ...block
+    };
+    localAvailabilityBlocks.push(blocked);
+    return blocked;
   }
 };
 

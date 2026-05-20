@@ -16,6 +16,7 @@ import {
   type FeatureId,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
+  type OwnerAvailabilityBlock,
   type SharedShortlist,
   type SharedShortlistItem,
   type ShootType,
@@ -43,6 +44,7 @@ export const buildServer = () => {
   }));
   const bookingIntents: BookingIntent[] = [];
   const shortlists: SharedShortlist[] = [];
+  const availabilityBlocks: OwnerAvailabilityBlock[] = [];
 
   app.register(cors, {
     origin: true
@@ -111,9 +113,60 @@ export const buildServer = () => {
     const date = request.query.date ?? new Date().toISOString().slice(0, 10);
     const durationHours = request.query.durationHours ? Number(request.query.durationHours) : 2;
 
+    const availability = getAvailabilityForStudio(studio, date, durationHours);
+
     return {
-      availability: getAvailabilityForStudio(studio, date, durationHours)
+      availability: {
+        ...availability,
+        slots: availability.slots.map((slot) => ({
+          ...slot,
+          available:
+            slot.available &&
+            !availabilityBlocks.some(
+              (block) =>
+                block.studioSlug === slot.studioSlug &&
+                block.roomId === slot.roomId &&
+                block.date === slot.date &&
+                block.startTime === slot.startTime
+            )
+        }))
+      }
     };
+  });
+
+  app.post<{
+    Body: Omit<OwnerAvailabilityBlock, "id">;
+  }>("/owner/availability-blocks", async (request, reply) => {
+    const studio = findStudioBySlug(studios, request.body.studioSlug);
+
+    if (!studio) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    const room = studio.rooms.find((candidate) => candidate.id === request.body.roomId);
+    if (!room) {
+      return reply.code(400).send({
+        error: "INVALID_AVAILABILITY_BLOCK",
+        message: "Room was not found"
+      });
+    }
+
+    const block: OwnerAvailabilityBlock = {
+      id: `block-${availabilityBlocks.length + 1}`,
+      studioSlug: request.body.studioSlug,
+      roomId: request.body.roomId,
+      date: request.body.date,
+      startTime: request.body.startTime,
+      reason: request.body.reason
+    };
+    availabilityBlocks.push(block);
+
+    return reply.code(201).send({
+      block
+    });
   });
 
   app.post<{

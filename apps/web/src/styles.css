@@ -544,7 +544,7 @@ h2 {
 
 .owner-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   margin-top: 14px;
   border: 1px solid #eadfd2;

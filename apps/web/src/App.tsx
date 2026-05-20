@@ -28,6 +28,7 @@ import {
   type AmenityId,
   type EquipmentId,
   type FeatureId,
+  type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type SharedShortlistItem,
   type ShortlistDecision,
@@ -37,6 +38,7 @@ import {
   type StudioSearchFilters
 } from "@studio-market/shared";
 import {
+  createOwnerAvailabilityBlock,
   createSharedShortlist,
   decideOwnerBooking,
   loadAvailability,
@@ -306,6 +308,7 @@ export const App = () => {
           setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
           setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
         }}
+        onBlockAvailability={createOwnerAvailabilityBlock}
         onUpdateListing={async (studio, updates) => {
           const updated = await updateOwnerListing(studio, updates);
           setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
@@ -479,13 +482,13 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
   useEffect(() => {
     loadAvailability(studio, bookingDate).then((availability) => {
       setSlots(availability.slots);
-      setSelectedSlot(availability.slots[0]);
+      setSelectedSlot(availability.slots.find((slot) => slot.available));
     });
   }, [studio]);
 
   const submitBooking = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedSlot) return;
+    if (!selectedSlot || !selectedSlot.available) return;
 
     const nextBooking = await submitBookingRequest(studio.slug, {
       roomId: selectedSlot.roomId,
@@ -608,15 +611,18 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
           <div className="slot-grid">
             {slots.slice(0, 6).map((slot) => (
               <button
-                aria-label={`${slot.startTime} ${slot.roomName} ${accessibleMoney(slot.price, slot.currency)}`}
+                aria-label={`${slot.startTime} ${slot.roomName} ${accessibleMoney(slot.price, slot.currency)}${
+                  slot.available ? "" : " unavailable"
+                }`}
                 className={`slot-button ${selectedSlot?.id === slot.id ? "slot-active" : ""}`}
+                disabled={!slot.available}
                 key={slot.id}
                 onClick={() => setSelectedSlot(slot)}
                 type="button"
               >
                 <span>{slot.startTime}</span>
                 <strong>{slot.roomName}</strong>
-                <small>{money(slot.price, slot.currency)}</small>
+                <small>{slot.available ? money(slot.price, slot.currency) : "Unavailable"}</small>
               </button>
             ))}
           </div>
@@ -672,6 +678,7 @@ interface OwnerDashboardProps {
   onOpenSaved: () => void;
   onOpenBookings: () => void;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
+  onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
   onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
 }
 
@@ -973,9 +980,10 @@ const OwnerDashboard = ({
   onOpenSaved,
   onOpenBookings,
   onDecideBooking,
+  onBlockAvailability,
   onUpdateListing
 }: OwnerDashboardProps) => {
-  const [activeTab, setActiveTab] = useState<"requests" | "listing">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "calendar" | "listing">("requests");
 
   return (
     <main className="app-shell owner-shell">
@@ -983,19 +991,29 @@ const OwnerDashboard = ({
         <div className="top-bar">
           <div>
             <p className="eyebrow">Studio owners</p>
-            <h1>{activeTab === "requests" ? "Owner inbox" : "Manage listing"}</h1>
+            <h1>
+              {activeTab === "requests" ? "Owner inbox" : activeTab === "calendar" ? "Calendar" : "Manage listing"}
+            </h1>
           </div>
           <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
             <Search size={20} />
           </button>
         </div>
         <div className="owner-summary">
-          {activeTab === "requests" ? <Inbox size={20} /> : <Home size={20} />}
+          {activeTab === "requests" ? <Inbox size={20} /> : activeTab === "calendar" ? <CalendarDays size={20} /> : <Home size={20} />}
           <div>
-            <strong>{activeTab === "requests" ? `${bookings.length} requests` : studio?.name ?? "Studio listing"}</strong>
+            <strong>
+              {activeTab === "requests"
+                ? `${bookings.length} requests`
+                : activeTab === "calendar"
+                  ? "Availability controls"
+                  : studio?.name ?? "Studio listing"}
+            </strong>
             <span>
               {activeTab === "requests"
                 ? "Review holds before payment collection."
+                : activeTab === "calendar"
+                  ? "Block maintenance, private shoots, and owner holds."
                 : "Keep the public studio profile ready for photographers and clients."}
             </span>
           </div>
@@ -1009,6 +1027,13 @@ const OwnerDashboard = ({
             Requests
           </button>
           <button
+            className={activeTab === "calendar" ? "active" : ""}
+            onClick={() => setActiveTab("calendar")}
+            type="button"
+          >
+            Calendar
+          </button>
+          <button
             className={activeTab === "listing" ? "active" : ""}
             onClick={() => setActiveTab("listing")}
             type="button"
@@ -1020,6 +1045,8 @@ const OwnerDashboard = ({
 
       {activeTab === "requests" ? (
         <OwnerRequests bookings={bookings} onDecideBooking={onDecideBooking} />
+      ) : activeTab === "calendar" && studio ? (
+        <OwnerCalendar studio={studio} onBlockAvailability={onBlockAvailability} />
       ) : studio ? (
         <OwnerListingEditor studio={studio} onUpdateListing={onUpdateListing} />
       ) : (
@@ -1106,6 +1133,100 @@ const OwnerRequests = ({ bookings, onDecideBooking }: OwnerRequestsProps) => (
     )}
   </section>
 );
+
+interface OwnerCalendarProps {
+  studio: Studio;
+  onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
+}
+
+const OwnerCalendar = ({ studio, onBlockAvailability }: OwnerCalendarProps) => {
+  const [roomId, setRoomId] = useState(studio.rooms[0]?.id ?? "");
+  const [date, setDate] = useState("2026-06-12");
+  const [startTime, setStartTime] = useState("09:00");
+  const [reason, setReason] = useState("");
+  const [blocks, setBlocks] = useState<OwnerAvailabilityBlock[]>([]);
+  const selectedRoom = studio.rooms.find((room) => room.id === roomId) ?? studio.rooms[0];
+
+  const blockSlot = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedRoom) return;
+
+    const block = await onBlockAvailability({
+      studioSlug: studio.slug,
+      roomId: selectedRoom.id,
+      date,
+      startTime,
+      reason: reason.trim() || "Owner hold"
+    });
+    setBlocks((current) => [block, ...current]);
+    setReason("");
+  };
+
+  return (
+    <section className="owner-list calendar-editor" aria-label="Owner calendar">
+      <article className="listing-preview">
+        <CalendarDays size={28} />
+        <div>
+          <p className="eyebrow">{studio.name}</p>
+          <h2>Availability holds</h2>
+          <p>Block public booking slots for maintenance, private shoots, or owner use.</p>
+        </div>
+      </article>
+
+      <form className="booking-form listing-form" onSubmit={blockSlot}>
+        <label>
+          Room
+          <select value={roomId} onChange={(event) => setRoomId(event.target.value)}>
+            {studio.rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Date
+          <input value={date} onChange={(event) => setDate(event.target.value)} type="date" />
+        </label>
+        <label>
+          Start time
+          <select value={startTime} onChange={(event) => setStartTime(event.target.value)}>
+            {["09:00", "11:00", "13:00", "15:00"].map((time) => (
+              <option key={time} value={time}>
+                {time}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Block reason
+          <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Maintenance" />
+        </label>
+        <button className="request-button" type="submit">
+          Block selected slot
+        </button>
+      </form>
+
+      {blocks.map((block) => {
+        const room = studio.rooms.find((candidate) => candidate.id === block.roomId);
+        return (
+          <article className="owner-request" key={block.id}>
+            <div className="owner-request-head">
+              <div>
+                <p className="eyebrow">{block.date}</p>
+                <h2>
+                  {block.startTime} {room?.name ?? "Room"} blocked.
+                </h2>
+              </div>
+              <span className="status-pill">Blocked</span>
+            </div>
+            <p className="owner-message">{block.reason}</p>
+          </article>
+        );
+      })}
+    </section>
+  );
+};
 
 interface OwnerListingEditorProps {
   studio: Studio;
