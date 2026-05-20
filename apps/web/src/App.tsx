@@ -95,6 +95,14 @@ const mediaKindLabels: Record<StudioImage["kind"], string> = {
   equipment: "Equipment and props"
 };
 type AppView = "explore" | "saved" | "bookings" | "host";
+type BookingMessageAuthor = "guest" | "studio";
+
+interface BookingMessage {
+  id: string;
+  author: BookingMessageAuthor;
+  authorLabel: string;
+  body: string;
+}
 
 const shortlistDecisionLabels: Record<ShortlistDecision, string> = {
   favourite: "Favourite",
@@ -139,6 +147,7 @@ export const App = () => {
   const [view, setView] = useState<AppView>(initialViewFromHash);
   const [ownerBookings, setOwnerBookings] = useState<BookingIntent[]>([]);
   const [customerBookings, setCustomerBookings] = useState<BookingIntent[]>([]);
+  const [bookingMessages, setBookingMessages] = useState<Record<string, BookingMessage[]>>({});
   const [lastGuestEmail, setLastGuestEmail] = useState<string | undefined>();
   const [hashVersion, setHashVersion] = useState(0);
   const [shortlistItems, setShortlistItems] = useState<Record<string, SharedShortlistItem>>({});
@@ -248,6 +257,25 @@ export const App = () => {
     });
   };
 
+  const sendBookingMessage = (booking: BookingIntent, author: BookingMessageAuthor, body: string) => {
+    const trimmedBody = body.trim();
+    if (!trimmedBody) return;
+
+    const authorLabel = author === "guest" ? booking.guestName : "Studio";
+    setBookingMessages((current) => ({
+      ...current,
+      [booking.id]: [
+        ...(current[booking.id] ?? []),
+        {
+          id: `${booking.id}-${author}-${Date.now()}`,
+          author,
+          authorLabel,
+          body: trimmedBody
+        }
+      ]
+    }));
+  };
+
   const openStudio = (studio: Studio) => {
     window.location.hash = `studio/${studio.slug}`;
     setSelectedStudio(studio);
@@ -279,6 +307,7 @@ export const App = () => {
     return (
       <CustomerBookings
         bookings={customerBookings}
+        messages={bookingMessages}
         onBackToExplore={() => setView("explore")}
         onConfirmPayment={async (booking) => {
           const updated = await confirmBookingPayment(booking);
@@ -297,6 +326,7 @@ export const App = () => {
         }}
         onOpenSaved={() => setView("saved")}
         onOpenHost={() => setView("host")}
+        onSendMessage={(booking, body) => sendBookingMessage(booking, "guest", body)}
       />
     );
   }
@@ -333,6 +363,7 @@ export const App = () => {
     return (
       <OwnerDashboard
         bookings={ownerBookings}
+        messages={bookingMessages}
         onBackToExplore={() => setView("explore")}
         onOpenSaved={() => setView("saved")}
         onOpenBookings={() => setView("bookings")}
@@ -347,6 +378,7 @@ export const App = () => {
           setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
           setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
         }}
+        onSendMessage={(booking, body) => sendBookingMessage(booking, "studio", body)}
         onBlockAvailability={createOwnerAvailabilityBlock}
         onReleaseAvailability={releaseOwnerAvailabilityBlock}
         onUpdateListing={async (studio, updates) => {
@@ -742,12 +774,14 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
 
 interface OwnerDashboardProps {
   bookings: BookingIntent[];
+  messages: Record<string, BookingMessage[]>;
   studio?: Studio;
   onBackToExplore: () => void;
   onOpenSaved: () => void;
   onOpenBookings: () => void;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
   onCompleteBooking: (booking: BookingIntent) => Promise<void>;
+  onSendMessage: (booking: BookingIntent, body: string) => void;
   onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
   onReleaseAvailability: (blockId: string) => Promise<void>;
   onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
@@ -768,22 +802,28 @@ const statusLabel = (status: BookingIntent["status"]) => {
 
 interface CustomerBookingsProps {
   bookings: BookingIntent[];
+  messages: Record<string, BookingMessage[]>;
   onBackToExplore: () => void;
   onConfirmPayment: (booking: BookingIntent) => Promise<BookingIntent>;
   onSubmitReview: (booking: BookingIntent, rating: number, comment: string) => Promise<Studio>;
   onOpenSaved: () => void;
   onOpenHost: () => void;
+  onSendMessage: (booking: BookingIntent, body: string) => void;
 }
 
 const CustomerBookings = ({
   bookings,
+  messages,
   onBackToExplore,
   onConfirmPayment,
   onSubmitReview,
   onOpenSaved,
-  onOpenHost
+  onOpenHost,
+  onSendMessage
 }: CustomerBookingsProps) => {
   const [confirmedPaymentFor, setConfirmedPaymentFor] = useState<string | undefined>();
+  const [receiptReadyFor, setReceiptReadyFor] = useState<string | undefined>();
+  const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
   const [reviewRatings, setReviewRatings] = useState<Record<string, number>>({});
   const [reviewedStudios, setReviewedStudios] = useState<Record<string, Studio>>({});
@@ -861,8 +901,57 @@ const CustomerBookings = ({
                       Shoot time: {booking.date} at {booking.startTime}
                     </p>
                   </div>
+                  <button
+                    className="secondary-button"
+                    aria-label={`Download receipt for ${booking.studioName}`}
+                    onClick={() => setReceiptReadyFor(booking.id)}
+                    type="button"
+                  >
+                    Download receipt
+                  </button>
+                  {receiptReadyFor === booking.id && (
+                    <p className="booking-status">Receipt download prepared.</p>
+                  )}
                 </section>
               )}
+
+              <section className="booking-thread" aria-label={`Messages for ${booking.studioName}`}>
+                <div>
+                  <p className="eyebrow">Messages</p>
+                  <h3>Booking messages</h3>
+                </div>
+                {(messages[booking.id] ?? []).length > 0 ? (
+                  <div className="message-list">
+                    {(messages[booking.id] ?? []).map((message) => (
+                      <p className={`message-bubble ${message.author}`} key={message.id}>
+                        {message.authorLabel}: {message.body}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="owner-message">No messages yet.</p>
+                )}
+                <label>
+                  Message studio about {booking.studioName}
+                  <textarea
+                    value={messageDrafts[booking.id] ?? ""}
+                    onChange={(event) =>
+                      setMessageDrafts((current) => ({ ...current, [booking.id]: event.target.value }))
+                    }
+                    placeholder="Ask about arrival, setup, props, or access"
+                  />
+                </label>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    onSendMessage(booking, messageDrafts[booking.id] ?? "");
+                    setMessageDrafts((current) => ({ ...current, [booking.id]: "" }));
+                  }}
+                  type="button"
+                >
+                  Send message to {booking.studioName}
+                </button>
+              </section>
 
               {booking.status === "completed" && !reviewedStudios[booking.id] && (
                 <form
@@ -1136,12 +1225,14 @@ const SavedStudios = ({
 
 const OwnerDashboard = ({
   bookings,
+  messages,
   studio,
   onBackToExplore,
   onOpenSaved,
   onOpenBookings,
   onDecideBooking,
   onCompleteBooking,
+  onSendMessage,
   onBlockAvailability,
   onReleaseAvailability,
   onUpdateListing
@@ -1207,7 +1298,13 @@ const OwnerDashboard = ({
       </section>
 
       {activeTab === "requests" ? (
-        <OwnerRequests bookings={bookings} onCompleteBooking={onCompleteBooking} onDecideBooking={onDecideBooking} />
+        <OwnerRequests
+          bookings={bookings}
+          messages={messages}
+          onCompleteBooking={onCompleteBooking}
+          onDecideBooking={onDecideBooking}
+          onSendMessage={onSendMessage}
+        />
       ) : activeTab === "calendar" && studio ? (
         <OwnerCalendar
           studio={studio}
@@ -1250,69 +1347,113 @@ const OwnerDashboard = ({
 
 interface OwnerRequestsProps {
   bookings: BookingIntent[];
+  messages: Record<string, BookingMessage[]>;
   onCompleteBooking: (booking: BookingIntent) => Promise<void>;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
+  onSendMessage: (booking: BookingIntent, body: string) => void;
 }
 
-const OwnerRequests = ({ bookings, onCompleteBooking, onDecideBooking }: OwnerRequestsProps) => (
-  <section className="owner-list" aria-label="Owner booking requests">
-    {bookings.length === 0 ? (
-      <div className="empty-state">
-        <h2>No requests yet</h2>
-        <p>New booking requests will appear here after a photographer or client asks for a studio time.</p>
-      </div>
-    ) : (
-      bookings.map((booking) => (
-        <article className="owner-request" key={booking.id}>
-          <div className="owner-request-head">
-            <div>
-              <p className="eyebrow">{booking.studioName}</p>
-              <h2>{booking.guestName}</h2>
-            </div>
-            <span className={`status-pill ${booking.status}`}>{statusLabel(booking.status)}</span>
-          </div>
-          <p>
-            {booking.roomName} - {booking.date} at {booking.startTime} - {booking.durationHours}h
-          </p>
-          <p className="owner-message">{booking.message}</p>
-          <strong>{money(booking.totalPrice, booking.currency)}</strong>
+const OwnerRequests = ({ bookings, messages, onCompleteBooking, onDecideBooking, onSendMessage }: OwnerRequestsProps) => {
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
 
-          {booking.status === "pending_owner_approval" && (
-            <div className="owner-actions">
+  return (
+    <section className="owner-list" aria-label="Owner booking requests">
+      {bookings.length === 0 ? (
+        <div className="empty-state">
+          <h2>No requests yet</h2>
+          <p>New booking requests will appear here after a photographer or client asks for a studio time.</p>
+        </div>
+      ) : (
+        bookings.map((booking) => (
+          <article className="owner-request" key={booking.id}>
+            <div className="owner-request-head">
+              <div>
+                <p className="eyebrow">{booking.studioName}</p>
+                <h2>{booking.guestName}</h2>
+              </div>
+              <span className={`status-pill ${booking.status}`}>{statusLabel(booking.status)}</span>
+            </div>
+            <p>
+              {booking.roomName} - {booking.date} at {booking.startTime} - {booking.durationHours}h
+            </p>
+            <p className="owner-message">{booking.message}</p>
+            <strong>{money(booking.totalPrice, booking.currency)}</strong>
+
+            <section className="booking-thread" aria-label={`Owner messages for ${booking.guestName}`}>
+              <div>
+                <p className="eyebrow">Messages</p>
+                <h3>Booking messages</h3>
+              </div>
+              {(messages[booking.id] ?? []).length > 0 ? (
+                <div className="message-list">
+                  {(messages[booking.id] ?? []).map((message) => (
+                    <p className={`message-bubble ${message.author}`} key={message.id}>
+                      {message.authorLabel}: {message.body}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="owner-message">No messages yet.</p>
+              )}
+              <label>
+                Reply to {booking.guestName} booking
+                <textarea
+                  value={replyDrafts[booking.id] ?? ""}
+                  onChange={(event) =>
+                    setReplyDrafts((current) => ({ ...current, [booking.id]: event.target.value }))
+                  }
+                  placeholder="Confirm arrival details or answer the client"
+                />
+              </label>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  onSendMessage(booking, replyDrafts[booking.id] ?? "");
+                  setReplyDrafts((current) => ({ ...current, [booking.id]: "" }));
+                }}
+                type="button"
+              >
+                Send reply to {booking.guestName}
+              </button>
+            </section>
+
+            {booking.status === "pending_owner_approval" && (
+              <div className="owner-actions">
+                <button
+                  className="approve-button"
+                  aria-label={`Approve ${booking.guestName} booking`}
+                  onClick={() => onDecideBooking(booking, "approve")}
+                >
+                  <Check size={17} />
+                  Approve
+                </button>
+                <button
+                  className="decline-button"
+                  aria-label={`Decline ${booking.guestName} booking`}
+                  onClick={() => onDecideBooking(booking, "decline")}
+                >
+                  <X size={17} />
+                  Decline
+                </button>
+              </div>
+            )}
+
+            {booking.status === "confirmed" && (
               <button
                 className="approve-button"
-                aria-label={`Approve ${booking.guestName} booking`}
-                onClick={() => onDecideBooking(booking, "approve")}
+                aria-label={`Complete ${booking.guestName} booking`}
+                onClick={() => onCompleteBooking(booking)}
               >
                 <Check size={17} />
-                Approve
+                Complete booking
               </button>
-              <button
-                className="decline-button"
-                aria-label={`Decline ${booking.guestName} booking`}
-                onClick={() => onDecideBooking(booking, "decline")}
-              >
-                <X size={17} />
-                Decline
-              </button>
-            </div>
-          )}
-
-          {booking.status === "confirmed" && (
-            <button
-              className="approve-button"
-              aria-label={`Complete ${booking.guestName} booking`}
-              onClick={() => onCompleteBooking(booking)}
-            >
-              <Check size={17} />
-              Complete booking
-            </button>
-          )}
-        </article>
-      ))
-    )}
-  </section>
-);
+            )}
+          </article>
+        ))
+      )}
+    </section>
+  );
+};
 
 interface OwnerCalendarProps {
   studio: Studio;

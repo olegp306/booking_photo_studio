@@ -39,6 +39,8 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - AI media detail suggestions for category and room assignment.
 - Customer booking receipts after payment capture.
 - Review counts surfaced on studio cards and detail pages.
+- Booking message threads shared between customers and studio owners.
+- Receipt download preparation action from customer bookings.
 
 ## Project Docs
 
@@ -56,5 +58,5 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 6. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
 7. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
 8. Add authentication and durable database storage for shared shortlists, comments, and decisions.
-9. Add post-booking lifecycle: messages, downloadable receipts, and full review history.
+9. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
 10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

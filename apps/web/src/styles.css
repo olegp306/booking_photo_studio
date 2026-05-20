@@ -585,6 +585,41 @@ h2 {
   font-weight: 800;
 }
 
+.booking-thread {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #eadfd2;
+  padding-top: 12px;
+}
+
+.booking-thread h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.message-list {
+  display: grid;
+  gap: 8px;
+}
+
+.message-bubble {
+  margin: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #191714;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.message-bubble.guest {
+  background: #f2eadf;
+}
+
+.message-bubble.studio {
+  background: #e8f4ea;
+}
+
 .owner-shell {
   background: #fffaf4;
 }

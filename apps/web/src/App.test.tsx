@@ -169,7 +169,40 @@ describe("App", () => {
     expect(screen.getByText("Receipt #studio-lumen-karlin-lumen-product-2026-06-12-11-00-marta-example-com")).toBeInTheDocument();
     expect(screen.getByText("Paid CZK 1,400")).toBeInTheDocument();
     expect(screen.getByText("Payment status: Confirmed")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Download receipt for Studio Lumen Karlin" }));
+    expect(await screen.findByText("Receipt download prepared.")).toBeInTheDocument();
   });
+
+  it("lets customers and studio owners exchange booking messages", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(await screen.findByRole("button", { name: "11:00 Product Corner CZK 1,400" }));
+    await user.type(screen.getByLabelText("Name"), "Marta Client");
+    await user.type(screen.getByLabelText("Email"), "marta@example.com");
+    await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await user.click(screen.getByRole("button", { name: "Request booking" }));
+    await screen.findByText("Request sent: waiting for owner approval.");
+    await user.click(screen.getByRole("button", { name: "Back to results" }));
+
+    await user.click(screen.getByRole("link", { name: "Bookings" }));
+    await user.type(
+      await screen.findByLabelText("Message studio about Studio Lumen Karlin"),
+      "Can we arrive 15 minutes early?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send message to Studio Lumen Karlin" }));
+    expect(await screen.findByText("Marta Client: Can we arrive 15 minutes early?")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Host" }));
+    expect(await screen.findByText("Marta Client: Can we arrive 15 minutes early?")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Reply to Marta Client booking"), "Yes, we will open the studio early.");
+    await user.click(screen.getByRole("button", { name: "Send reply to Marta Client" }));
+    expect(await screen.findByText("Studio: Yes, we will open the studio early.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Bookings" }));
+    expect(await screen.findByText("Studio: Yes, we will open the studio early.")).toBeInTheDocument();
+  }, 20000);
 
   it("lets owners mark confirmed bookings completed", async () => {
     const user = userEvent.setup();
