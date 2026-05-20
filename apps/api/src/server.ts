@@ -5,6 +5,7 @@ import {
   decideBookingIntent,
   findStudioBySlug,
   getAvailabilityForStudio,
+  markBookingCompleted,
   markBookingPaid,
   searchStudios,
   seedStudios,
@@ -297,6 +298,33 @@ export const buildServer = () => {
       return reply.code(400).send({
         error: "INVALID_BOOKING_DECISION",
         message: error instanceof Error ? error.message : "Booking decision is invalid"
+      });
+    }
+  });
+
+  app.post<{
+    Params: { bookingId: string };
+  }>("/owner/bookings/:bookingId/complete", async (request, reply) => {
+    const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
+
+    if (bookingIndex === -1) {
+      return reply.code(404).send({
+        error: "BOOKING_NOT_FOUND",
+        message: "Booking request was not found"
+      });
+    }
+
+    try {
+      const booking = markBookingCompleted(bookingIntents[bookingIndex]);
+      bookingIntents[bookingIndex] = booking;
+
+      return {
+        booking
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_COMPLETION",
+        message: error instanceof Error ? error.message : "Booking cannot be completed"
       });
     }
   });

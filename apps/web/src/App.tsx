@@ -38,6 +38,7 @@ import {
   type StudioSearchFilters
 } from "@studio-market/shared";
 import {
+  completeOwnerBooking,
   confirmBookingPayment,
   createOwnerAvailabilityBlock,
   createSharedShortlist,
@@ -313,6 +314,11 @@ export const App = () => {
         studio={studios[0]}
         onDecideBooking={async (booking, decision) => {
           const updated = await decideOwnerBooking(booking, decision);
+          setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+          setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        }}
+        onCompleteBooking={async (booking) => {
+          const updated = await completeOwnerBooking(booking);
           setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
           setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
         }}
@@ -687,6 +693,7 @@ interface OwnerDashboardProps {
   onOpenSaved: () => void;
   onOpenBookings: () => void;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
+  onCompleteBooking: (booking: BookingIntent) => Promise<void>;
   onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
   onReleaseAvailability: (blockId: string) => Promise<void>;
   onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
@@ -1000,6 +1007,7 @@ const OwnerDashboard = ({
   onOpenSaved,
   onOpenBookings,
   onDecideBooking,
+  onCompleteBooking,
   onBlockAvailability,
   onReleaseAvailability,
   onUpdateListing
@@ -1065,7 +1073,7 @@ const OwnerDashboard = ({
       </section>
 
       {activeTab === "requests" ? (
-        <OwnerRequests bookings={bookings} onDecideBooking={onDecideBooking} />
+        <OwnerRequests bookings={bookings} onCompleteBooking={onCompleteBooking} onDecideBooking={onDecideBooking} />
       ) : activeTab === "calendar" && studio ? (
         <OwnerCalendar
           studio={studio}
@@ -1107,10 +1115,11 @@ const OwnerDashboard = ({
 
 interface OwnerRequestsProps {
   bookings: BookingIntent[];
+  onCompleteBooking: (booking: BookingIntent) => Promise<void>;
   onDecideBooking: (booking: BookingIntent, decision: "approve" | "decline") => Promise<void>;
 }
 
-const OwnerRequests = ({ bookings, onDecideBooking }: OwnerRequestsProps) => (
+const OwnerRequests = ({ bookings, onCompleteBooking, onDecideBooking }: OwnerRequestsProps) => (
   <section className="owner-list" aria-label="Owner booking requests">
     {bookings.length === 0 ? (
       <div className="empty-state">
@@ -1152,6 +1161,17 @@ const OwnerRequests = ({ bookings, onDecideBooking }: OwnerRequestsProps) => (
                 Decline
               </button>
             </div>
+          )}
+
+          {booking.status === "confirmed" && (
+            <button
+              className="approve-button"
+              aria-label={`Complete ${booking.guestName} booking`}
+              onClick={() => onCompleteBooking(booking)}
+            >
+              <Check size={17} />
+              Complete booking
+            </button>
           )}
         </article>
       ))

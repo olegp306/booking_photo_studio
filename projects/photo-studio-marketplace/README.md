@@ -15,6 +15,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Owner calendar holds for blocking and releasing public booking slots.
 - Owner inbox for approving and declining booking requests.
 - Customer bookings view with payment capture status that confirms approved bookings.
+- Owner booking completion action after a confirmed shoot.
 - Saved studios shortlist for comparing and sharing candidates.
 - Shareable studio detail links for client-photographer handoff.
 - Shareable saved shortlists for sending several studio options at once.
@@ -40,5 +41,5 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 6. Add AI media helper flows to classify uploaded images as hero, room, example, equipment, or props.
 7. Expand owner calendar management with recurring blocks, full-day closures, and availability overrides.
 8. Add authentication and durable database storage for shared shortlists, comments, and decisions.
-9. Add post-booking lifecycle: messages, confirmations, reviews, and receipts.
+9. Add post-booking lifecycle: messages, client reviews, and receipts.
 10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

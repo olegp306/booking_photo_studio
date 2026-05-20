@@ -3,6 +3,7 @@ import {
   decideBookingIntent,
   findStudioBySlug,
   getAvailabilityForStudio,
+  markBookingCompleted,
   markBookingPaid,
   searchStudios,
   seedStudios,
@@ -157,6 +158,19 @@ export const confirmBookingPayment = async (booking: BookingIntent): Promise<Boo
     return payload.booking;
   } catch {
     return markBookingPaid(booking);
+  }
+};
+
+export const completeOwnerBooking = async (booking: BookingIntent): Promise<BookingIntent> => {
+  try {
+    const response = await fetch(`${API_BASE}/owner/bookings/${booking.id}/complete`, {
+      method: "POST"
+    });
+    if (!response.ok) throw new Error("Failed to complete booking");
+    const payload = (await response.json()) as { booking: BookingIntent };
+    return payload.booking;
+  } catch {
+    return markBookingCompleted(booking);
   }
 };
 

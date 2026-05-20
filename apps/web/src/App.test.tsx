@@ -155,6 +155,31 @@ describe("App", () => {
     expect(await screen.findByText("Payment captured: booking confirmed.")).toBeInTheDocument();
   });
 
+  it("lets owners mark confirmed bookings completed", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(await screen.findByRole("button", { name: "11:00 Product Corner CZK 1,400" }));
+    await user.type(screen.getByLabelText("Name"), "Marta Client");
+    await user.type(screen.getByLabelText("Email"), "marta@example.com");
+    await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await user.click(screen.getByRole("button", { name: "Request booking" }));
+    await screen.findByText("Request sent: waiting for owner approval.");
+    await user.click(screen.getByRole("button", { name: "Back to results" }));
+
+    await user.click(screen.getByRole("link", { name: "Host" }));
+    await user.click(await screen.findByRole("button", { name: "Approve Marta Client booking" }));
+    await user.click(screen.getByRole("link", { name: "Bookings" }));
+    await user.click(await screen.findByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
+    await screen.findByText("Confirmed");
+
+    await user.click(screen.getByRole("link", { name: "Host" }));
+    await user.click(await screen.findByRole("button", { name: "Complete Marta Client booking" }));
+
+    expect(await screen.findByText("Completed")).toBeInTheDocument();
+  });
+
   it("shows saved studios and opens a saved studio detail", async () => {
     const user = userEvent.setup();
     render(<App />);

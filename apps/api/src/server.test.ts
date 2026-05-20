@@ -317,6 +317,38 @@ describe("studio API", () => {
     expect(customerBookings.json().bookings[0].status).toBe("confirmed");
   });
 
+  it("lets owners complete confirmed bookings", async () => {
+    const server = buildServer();
+    const created = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00",
+        durationHours: 2,
+        guestName: "Olga Photographer",
+        guestEmail: "olga@example.com",
+        shootType: "portrait",
+        message: "Small portrait session"
+      }
+    });
+    const bookingId = created.json().booking.id;
+    await server.inject({
+      method: "POST",
+      url: `/bookings/${bookingId}/payment`
+    });
+
+    const completed = await server.inject({
+      method: "POST",
+      url: `/owner/bookings/${bookingId}/complete`
+    });
+
+    expect(completed.statusCode).toBe(200);
+    expect(completed.json().booking.status).toBe("completed");
+  });
+
   it("creates and returns shared shortlists", async () => {
     const server = buildServer();
     const created = await server.inject({

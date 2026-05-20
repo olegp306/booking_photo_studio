@@ -106,3 +106,14 @@ export const markBookingPaid = (booking: BookingIntent): BookingIntent => {
     status: "confirmed"
   };
 };
+
+export const markBookingCompleted = (booking: BookingIntent): BookingIntent => {
+  if (booking.status !== "confirmed") {
+    throw new Error("Only confirmed bookings can be completed");
+  }
+
+  return {
+    ...booking,
+    status: "completed"
+  };
+};
