@@ -576,6 +576,19 @@ h2 {
   padding-top: 18px;
 }
 
+.shortlist-share {
+  display: grid;
+  gap: 12px;
+  padding: 18px 18px 0;
+}
+
+.shortlist-share > .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .owner-request,
 .empty-state {
   border: 1px solid #eadfd2;

@@ -71,7 +71,7 @@ const mediaKindLabels: Record<StudioImage["kind"], string> = {
 type AppView = "explore" | "saved" | "bookings" | "host";
 
 const initialViewFromHash = (): AppView => {
-  if (window.location.hash === "#saved") return "saved";
+  if (window.location.hash === "#saved" || window.location.hash.startsWith("#saved/")) return "saved";
   if (window.location.hash === "#bookings") return "bookings";
   if (window.location.hash === "#profile") return "host";
   return "explore";
@@ -80,6 +80,16 @@ const initialViewFromHash = (): AppView => {
 const studioSlugFromHash = () => {
   const prefix = "#studio/";
   return window.location.hash.startsWith(prefix) ? window.location.hash.slice(prefix.length) : undefined;
+};
+
+const savedSlugsFromHash = () => {
+  const prefix = "#saved/";
+  if (!window.location.hash.startsWith(prefix)) return [];
+  return window.location.hash
+    .slice(prefix.length)
+    .split(",")
+    .map((slug) => slug.trim())
+    .filter(Boolean);
 };
 
 export const App = () => {
@@ -123,6 +133,15 @@ export const App = () => {
       setView("explore");
     }
   }, [hashVersion, selectedStudio, studios]);
+
+  useEffect(() => {
+    const sharedSavedSlugs = savedSlugsFromHash();
+    if (!sharedSavedSlugs.length) return;
+
+    setSaved(new Set(sharedSavedSlugs));
+    setSelectedStudio(undefined);
+    setView("saved");
+  }, [hashVersion]);
 
   useEffect(() => {
     if (view === "host") {
@@ -717,68 +736,97 @@ const SavedStudios = ({
   onOpenHost,
   onOpenStudio,
   onSave
-}: SavedStudiosProps) => (
-  <main className="app-shell saved-shell">
-    <section className="hero-band owner-hero">
-      <div className="top-bar">
-        <div>
-          <p className="eyebrow">Shortlist</p>
-          <h1>Saved studios</h1>
-        </div>
-        <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
-          <Search size={20} />
-        </button>
-      </div>
-      <div className="owner-summary">
-        <Heart size={20} />
-        <div>
-          <strong>{savedCount} saved</strong>
-          <span>Keep a shortlist to share with a photographer or client.</span>
-        </div>
-      </div>
-    </section>
+}: SavedStudiosProps) => {
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareUrl = `${window.location.origin}/#saved/${savedStudios.map((studio) => studio.slug).join(",")}`;
+  const shareMessage = `Compare ${savedStudios.length} Prague studios: ${savedStudios
+    .map((studio) => studio.name)
+    .join(", ")}.`;
 
-    {savedStudios.length === 0 ? (
-      <section className="owner-list">
-        <div className="empty-state">
-          <h2>No saved studios yet</h2>
-          <p>Tap the heart on any studio to build a shortlist for the shoot.</p>
+  return (
+    <main className="app-shell saved-shell">
+      <section className="hero-band owner-hero">
+        <div className="top-bar">
+          <div>
+            <p className="eyebrow">Shortlist</p>
+            <h1>Saved studios</h1>
+          </div>
+          <button className="icon-button" aria-label="Back to explore" onClick={onBackToExplore}>
+            <Search size={20} />
+          </button>
+        </div>
+        <div className="owner-summary">
+          <Heart size={20} />
+          <div>
+            <strong>{savedCount} saved</strong>
+            <span>Keep a shortlist to share with a photographer or client.</span>
+          </div>
         </div>
       </section>
-    ) : (
-      <section className="studio-list saved-list" aria-label="Saved studios list">
-        {savedStudios.map((studio) => (
-          <StudioCard
-            key={studio.id}
-            studio={studio}
-            isSaved
-            onOpen={() => onOpenStudio(studio)}
-            onSave={() => onSave(studio.slug)}
-          />
-        ))}
-      </section>
-    )}
 
-    <nav className="bottom-nav" aria-label="Primary navigation">
-      <a href="#explore" onClick={onBackToExplore}>
-        <Search size={19} />
-        Explore
-      </a>
-      <a className="active" href="#saved">
-        <Heart size={19} />
-        Saved
-      </a>
-      <a href="#bookings" onClick={onOpenBookings}>
-        <CalendarDays size={19} />
-        Bookings
-      </a>
-      <a href="#profile" onClick={onOpenHost}>
-        <Home size={19} />
-        Host
-      </a>
-    </nav>
-  </main>
-);
+      {savedStudios.length === 0 ? (
+        <section className="owner-list">
+          <div className="empty-state">
+            <h2>No saved studios yet</h2>
+            <p>Tap the heart on any studio to build a shortlist for the shoot.</p>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="shortlist-share">
+            <button className="secondary-button" onClick={() => setShareOpen((current) => !current)} type="button">
+              <Share2 size={17} />
+              Share saved shortlist
+            </button>
+            {shareOpen && (
+              <section className="share-panel" aria-label="Saved shortlist sharing">
+                <div>
+                  <p className="eyebrow">Share shortlist</p>
+                  <h2>Share saved shortlist</h2>
+                </div>
+                <label>
+                  Shortlist link
+                  <input readOnly value={shareUrl} />
+                </label>
+                <p>{shareMessage}</p>
+              </section>
+            )}
+          </section>
+          <section className="studio-list saved-list" aria-label="Saved studios list">
+            {savedStudios.map((studio) => (
+              <StudioCard
+                key={studio.id}
+                studio={studio}
+                isSaved
+                onOpen={() => onOpenStudio(studio)}
+                onSave={() => onSave(studio.slug)}
+              />
+            ))}
+          </section>
+        </>
+      )}
+
+      <nav className="bottom-nav" aria-label="Primary navigation">
+        <a href="#explore" onClick={onBackToExplore}>
+          <Search size={19} />
+          Explore
+        </a>
+        <a className="active" href="#saved">
+          <Heart size={19} />
+          Saved
+        </a>
+        <a href="#bookings" onClick={onOpenBookings}>
+          <CalendarDays size={19} />
+          Bookings
+        </a>
+        <a href="#profile" onClick={onOpenHost}>
+          <Home size={19} />
+          Host
+        </a>
+      </nav>
+    </main>
+  );
+};
 
 const OwnerDashboard = ({
   bookings,

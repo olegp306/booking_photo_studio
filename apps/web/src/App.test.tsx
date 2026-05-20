@@ -169,6 +169,34 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Main Daylight Room" })).toBeInTheDocument();
   });
 
+  it("opens a saved shortlist from a shared saved link", async () => {
+    window.location.hash = "#saved/studio-lumen-karlin,atelier-rosa-vinohrady";
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Saved studios" })).toBeInTheDocument();
+    expect(screen.getByText("Studio Lumen Karlin")).toBeInTheDocument();
+    expect(screen.getByText("Atelier Rosa Vinohrady")).toBeInTheDocument();
+  });
+
+  it("shows a shareable saved shortlist link and message", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByText("Studio Lumen Karlin");
+    const saveButtons = screen.getAllByRole("button", { name: "Save studio" });
+    await user.click(saveButtons[0]);
+    await user.click(saveButtons[1]);
+    await user.click(screen.getByRole("link", { name: "Saved" }));
+    await user.click(await screen.findByRole("button", { name: "Share saved shortlist" }));
+
+    expect(await screen.findByRole("heading", { name: "Share saved shortlist" })).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("http://localhost:3000/#saved/studio-lumen-karlin,atelier-rosa-vinohrady")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Compare 2 Prague studios: Studio Lumen Karlin, Atelier Rosa Vinohrady.")).toBeInTheDocument();
+  });
+
   it("lets studio owners preview and edit their listing", async () => {
     const user = userEvent.setup();
     render(<App />);
