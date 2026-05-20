@@ -1269,11 +1269,18 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
   const [roomId, setRoomId] = useState(studio.rooms[0]?.id ?? "");
   const [date, setDate] = useState("2026-06-12");
   const [startTime, setStartTime] = useState("09:00");
+  const [calendarAction, setCalendarAction] = useState<"hold" | "open">("hold");
   const [isFullDay, setIsFullDay] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [reason, setReason] = useState("");
   const [blocks, setBlocks] = useState<OwnerAvailabilityBlock[]>([]);
   const selectedRoom = studio.rooms.find((room) => room.id === roomId) ?? studio.rooms[0];
+  const holdCount = blocks.filter((block) => (block.kind ?? "hold") === "hold").length;
+  const openOverrideCount = blocks.filter((block) => block.kind === "open").length;
+  const fullDayCount = blocks.filter((block) => (block.kind ?? "hold") === "hold" && block.startTime === "full-day").length;
+  const nextCalendarDate = blocks
+    .map((block) => block.date)
+    .sort((firstDate, secondDate) => firstDate.localeCompare(secondDate))[0];
 
   const blockSlot = async (event: FormEvent) => {
     event.preventDefault();
@@ -1285,8 +1292,9 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
           studioSlug: studio.slug,
           roomId: selectedRoom.id,
           date: addDays(date, index * 7),
-          startTime: isFullDay ? "full-day" : startTime,
-          reason: reason.trim() || "Owner hold"
+          startTime: calendarAction === "hold" && isFullDay ? "full-day" : startTime,
+          kind: calendarAction,
+          reason: reason.trim() || (calendarAction === "open" ? "Availability override" : "Owner hold")
         })
       )
     );
@@ -1312,6 +1320,23 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
 
       <form className="booking-form listing-form" onSubmit={blockSlot}>
         <label>
+          Calendar action
+          <select
+            value={calendarAction}
+            onChange={(event) => {
+              const nextAction = event.target.value as "hold" | "open";
+              setCalendarAction(nextAction);
+              if (nextAction === "open") {
+                setIsFullDay(false);
+                setRepeatWeeks(1);
+              }
+            }}
+          >
+            <option value="hold">Hold or closure</option>
+            <option value="open">Open extra availability</option>
+          </select>
+        </label>
+        <label>
           Room
           <select value={roomId} onChange={(event) => setRoomId(event.target.value)}>
             {studio.rooms.map((room) => (
@@ -1327,7 +1352,11 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
         </label>
         <label>
           Start time
-          <select disabled={isFullDay} value={startTime} onChange={(event) => setStartTime(event.target.value)}>
+          <select
+            disabled={calendarAction === "hold" && isFullDay}
+            value={startTime}
+            onChange={(event) => setStartTime(event.target.value)}
+          >
             {["09:00", "11:00", "13:00", "15:00"].map((time) => (
               <option key={time} value={time}>
                 {time}
@@ -1336,12 +1365,21 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
           </select>
         </label>
         <label className="checkbox-row">
-          <input checked={isFullDay} onChange={(event) => setIsFullDay(event.target.checked)} type="checkbox" />
+          <input
+            checked={calendarAction === "hold" && isFullDay}
+            disabled={calendarAction === "open"}
+            onChange={(event) => setIsFullDay(event.target.checked)}
+            type="checkbox"
+          />
           Full-day closure
         </label>
         <label>
           Repeat
-          <select value={repeatWeeks} onChange={(event) => setRepeatWeeks(Number(event.target.value))}>
+          <select
+            disabled={calendarAction === "open"}
+            value={repeatWeeks}
+            onChange={(event) => setRepeatWeeks(Number(event.target.value))}
+          >
             <option value={1}>Does not repeat</option>
             <option value={2}>Weekly for 2 weeks</option>
             <option value={4}>Weekly for 4 weeks</option>
@@ -1356,23 +1394,37 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
         </button>
       </form>
 
+      <section className="calendar-summary-panel" aria-label="Calendar summary">
+        <div>
+          <p className="eyebrow">Owner agenda</p>
+          <h2>Calendar summary</h2>
+        </div>
+        <div className="calendar-summary-grid">
+          <span>{holdCount} {holdCount === 1 ? "hold" : "holds"}</span>
+          <span>{openOverrideCount} open {openOverrideCount === 1 ? "override" : "overrides"}</span>
+          <span>{fullDayCount} full-day {fullDayCount === 1 ? "closure" : "closures"}</span>
+          <span>{nextCalendarDate ?? "No upcoming changes"}</span>
+        </div>
+      </section>
+
       {blocks.map((block) => {
         const room = studio.rooms.find((candidate) => candidate.id === block.roomId);
         const blockLabel = block.startTime === "full-day" ? "Full day" : block.startTime;
+        const isOpenOverride = block.kind === "open";
         return (
           <article className="owner-request" key={block.id}>
             <div className="owner-request-head">
               <div>
                 <p className="eyebrow">{block.date}</p>
                 <h2>
-                  {blockLabel} {room?.name ?? "Room"} blocked.
+                  {blockLabel} {room?.name ?? "Room"} {isOpenOverride ? "opened" : "blocked"}.
                 </h2>
               </div>
-              <span className="status-pill">Blocked</span>
+              <span className="status-pill">{isOpenOverride ? "Open" : "Blocked"}</span>
             </div>
             <p className="owner-message">{block.reason}</p>
             <button
-              aria-label={`Release ${blockLabel} ${room?.name ?? "Room"} block`}
+              aria-label={`Release ${blockLabel} ${room?.name ?? "Room"} ${isOpenOverride ? "override" : "block"}`}
               className="secondary-button"
               onClick={() => releaseBlock(block)}
               type="button"

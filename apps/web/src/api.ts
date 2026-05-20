@@ -30,10 +30,17 @@ let localShortlistCount = 0;
 let localAvailabilityBlockCount = 0;
 
 const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
+  (block.kind ?? "hold") === "hold" &&
   block.studioSlug === slot.studioSlug &&
   block.roomId === slot.roomId &&
   block.date === slot.date &&
   (block.startTime === slot.startTime || block.startTime === "full-day");
+const isOpenOverrideSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
+  block.kind === "open" &&
+  block.studioSlug === slot.studioSlug &&
+  block.roomId === slot.roomId &&
+  block.date === slot.date &&
+  block.startTime === slot.startTime;
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {
   const params = new URLSearchParams();
@@ -70,8 +77,8 @@ export const loadAvailability = async (studio: Studio, date: string): Promise<St
       slots: availability.slots.map((slot) => ({
         ...slot,
         available:
-          slot.available &&
-          !localAvailabilityBlocks.some((block) => isBlockedSlot(block, slot))
+          localAvailabilityBlocks.some((block) => isOpenOverrideSlot(block, slot)) ||
+          (slot.available && !localAvailabilityBlocks.some((block) => isBlockedSlot(block, slot)))
       }))
     };
   }

@@ -405,6 +405,27 @@ describe("App", () => {
     expect(screen.getByText("2026-06-19")).toBeInTheDocument();
   });
 
+  it("shows owner calendar summary and availability overrides", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+
+    expect(screen.getByRole("heading", { name: "Calendar summary" })).toBeInTheDocument();
+    expect(screen.getByText("0 holds")).toBeInTheDocument();
+    expect(screen.getByText("0 open overrides")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Calendar action"), "open");
+    await user.selectOptions(screen.getByLabelText("Start time"), "15:00");
+    await user.type(screen.getByLabelText("Block reason"), "Late public slot");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+
+    expect(await screen.findByText("15:00 Main Daylight Room opened.")).toBeInTheDocument();
+    expect(screen.getByText("0 holds")).toBeInTheDocument();
+    expect(screen.getByText("1 open override")).toBeInTheDocument();
+  });
+
   it("creates an AI listing draft from owner notes", async () => {
     const user = userEvent.setup();
     render(<App />);

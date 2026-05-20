@@ -161,6 +161,7 @@ export interface OwnerAvailabilityBlock {
   roomId: string;
   date: string;
   startTime: string;
+  kind?: "hold" | "open";
   reason: string;
 }
 

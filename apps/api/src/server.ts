@@ -54,10 +54,17 @@ export const buildServer = () => {
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
   const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
+    (block.kind ?? "hold") === "hold" &&
     block.studioSlug === slot.studioSlug &&
     block.roomId === slot.roomId &&
     block.date === slot.date &&
     (block.startTime === slot.startTime || block.startTime === "full-day");
+  const isOpenOverrideSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
+    block.kind === "open" &&
+    block.studioSlug === slot.studioSlug &&
+    block.roomId === slot.roomId &&
+    block.date === slot.date &&
+    block.startTime === slot.startTime;
 
   app.register(cors, {
     origin: true
@@ -134,8 +141,8 @@ export const buildServer = () => {
         slots: availability.slots.map((slot) => ({
           ...slot,
           available:
-            slot.available &&
-            !availabilityBlocks.some((block) => isBlockedSlot(block, slot))
+            availabilityBlocks.some((block) => isOpenOverrideSlot(block, slot)) ||
+            (slot.available && !availabilityBlocks.some((block) => isBlockedSlot(block, slot)))
         }))
       }
     };
@@ -167,6 +174,7 @@ export const buildServer = () => {
       roomId: request.body.roomId,
       date: request.body.date,
       startTime: request.body.startTime,
+      kind: request.body.kind ?? "hold",
       reason: request.body.reason
     };
     availabilityBlocks.push(block);

@@ -148,6 +148,58 @@ describe("studio API", () => {
     );
   });
 
+  it("lets owners open a selected slot over a full-day closure", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/owner/availability-blocks",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "full-day",
+        reason: "Private production"
+      }
+    });
+    const override = await server.inject({
+      method: "POST",
+      url: "/owner/availability-blocks",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "13:00",
+        kind: "open",
+        reason: "Public slot added back"
+      }
+    });
+
+    expect(override.statusCode).toBe(201);
+    expect(override.json().block).toEqual(
+      expect.objectContaining({
+        startTime: "13:00",
+        kind: "open"
+      })
+    );
+
+    const availability = await server.inject({
+      method: "GET",
+      url: "/studios/studio-lumen-karlin/availability?date=2026-06-12"
+    });
+    const slots = availability.json().availability.slots as Array<{ roomId: string; startTime: string; available: boolean }>;
+
+    expect(slots.find((slot) => slot.roomId === "lumen-main" && slot.startTime === "13:00")).toEqual(
+      expect.objectContaining({
+        available: true
+      })
+    );
+    expect(slots.find((slot) => slot.roomId === "lumen-main" && slot.startTime === "09:00")).toEqual(
+      expect.objectContaining({
+        available: false
+      })
+    );
+  });
+
   it("lets owners release a blocked availability slot", async () => {
     const server = buildServer();
     await server.inject({
