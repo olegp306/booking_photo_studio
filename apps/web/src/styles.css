@@ -1283,6 +1283,14 @@ h2 {
   gap: 10px;
 }
 
+.media-suggestion {
+  margin: 0;
+  color: #6f6357;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .secondary-button {
   border: 1px solid #191714;
   border-radius: 999px;

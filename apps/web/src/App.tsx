@@ -15,7 +15,7 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   amenityLabels,
   draftListingFromTranscript,
@@ -1593,6 +1593,16 @@ interface OwnerListingEditorProps {
   onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
 }
 
+const filenameCaption = (fileName: string) => fileName.replace(/\.[^.]+$/, "");
+
+const readMediaFile = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
+
 const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps) => {
   const [aiDraft, setAiDraft] = useState("");
   const [tagline, setTagline] = useState(studio.tagline);
@@ -1609,6 +1619,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [mediaCaption, setMediaCaption] = useState("");
   const [mediaKind, setMediaKind] = useState<StudioImage["kind"]>("room");
   const [mediaRoomId, setMediaRoomId] = useState(studio.rooms[0]?.id ?? "");
+  const [mediaSuggestion, setMediaSuggestion] = useState("");
   const [props, setProps] = useState(studio.props.join("\n"));
   const [accessNotes, setAccessNotes] = useState(studio.accessNotes);
   const [cancellationPolicy, setCancellationPolicy] = useState(studio.cancellationPolicy);
@@ -1629,6 +1640,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setImages(studio.images);
     setRooms(studio.rooms);
     setMediaRoomId(studio.rooms[0]?.id ?? "");
+    setMediaSuggestion("");
     setProps(studio.props.join("\n"));
     setAccessNotes(studio.accessNotes);
     setCancellationPolicy(studio.cancellationPolicy);
@@ -1679,6 +1691,62 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, ...updates } : room)));
   };
 
+  const handleMediaFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const dataUrl = await readMediaFile(file);
+    setMediaUrl(dataUrl);
+    if (!mediaCaption.trim()) setMediaCaption(filenameCaption(file.name));
+    setMediaSuggestion(`Uploaded ${file.name}.`);
+  };
+
+  const suggestMediaDetails = () => {
+    const note = `${mediaCaption} ${mediaUrl}`.toLowerCase();
+    const matchingRoom =
+      rooms.find((room) => note.includes(room.name.toLowerCase())) ??
+      rooms.find((room) => {
+        const normalizedName = room.name.toLowerCase();
+        return (
+          (normalizedName.includes("main") && /main|daylight|cyclorama|window/.test(note)) ||
+          (normalizedName.includes("product") && /product|corner|tabletop|still life/.test(note)) ||
+          (normalizedName.includes("lounge") && /lounge|sofa|lifestyle|client/.test(note))
+        );
+      });
+
+    if (matchingRoom) {
+      setMediaKind("room");
+      setMediaRoomId(matchingRoom.id);
+      setMediaSuggestion(`AI suggestion: room media for ${matchingRoom.name}.`);
+      return;
+    }
+
+    if (/hero|cover|main photo|opening/.test(note)) {
+      setMediaKind("hero");
+      setMediaRoomId("");
+      setMediaSuggestion("AI suggestion: hero media for the listing cover.");
+      return;
+    }
+
+    if (/example|shoot|portrait|fashion|editorial|campaign|lookbook/.test(note)) {
+      setMediaKind("example");
+      setMediaRoomId("");
+      setMediaSuggestion("AI suggestion: example shoot media for client inspiration.");
+      return;
+    }
+
+    if (/equipment|softbox|strobe|stand|c-stand|prop|backdrop/.test(note)) {
+      setMediaKind("equipment");
+      setMediaRoomId("");
+      setMediaSuggestion("AI suggestion: equipment and props media.");
+      return;
+    }
+
+    setMediaKind("room");
+    setMediaRoomId(rooms[0]?.id ?? "");
+    setMediaSuggestion("AI suggestion: room media. Review the room before saving.");
+  };
+
   const addMedia = () => {
     const trimmedUrl = mediaUrl.trim();
     const trimmedCaption = mediaCaption.trim();
@@ -1707,6 +1775,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setMediaCaption("");
     setMediaKind("room");
     setMediaRoomId(rooms[0]?.id ?? "");
+    setMediaSuggestion("");
   };
 
   const moveMedia = (imageId: string, direction: "up" | "down") => {
@@ -2038,6 +2107,10 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
           </div>
           <div className="media-form">
             <label>
+              Media file
+              <input accept="image/*" onChange={handleMediaFileUpload} type="file" />
+            </label>
+            <label>
               Media URL
               <input
                 value={mediaUrl}
@@ -2086,6 +2159,10 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
                 ))}
               </select>
             </label>
+            <button className="secondary-button" onClick={suggestMediaDetails} type="button">
+              Suggest media details
+            </button>
+            {mediaSuggestion ? <p className="media-suggestion">{mediaSuggestion}</p> : null}
             <button className="secondary-button" onClick={addMedia} type="button">
               Add media
             </button>

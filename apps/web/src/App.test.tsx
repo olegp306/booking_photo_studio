@@ -633,6 +633,40 @@ describe("App", () => {
     expect(mediaLibrary.getAllByText("Main Daylight Room").length).toBeGreaterThan(0);
   });
 
+  it("lets owners upload a local studio media file", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    const file = new File(["cyclorama room"], "main-room-cyclorama.jpg", { type: "image/jpeg" });
+    await user.upload(screen.getByLabelText("Media file"), file);
+    expect(await screen.findByDisplayValue("main-room-cyclorama")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add media" }));
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    const mediaLibrary = within(screen.getByLabelText("Studio media library"));
+    expect(mediaLibrary.getByAltText("main-room-cyclorama")).toHaveAttribute(
+      "src",
+      "data:image/jpeg;base64,Y3ljbG9yYW1hIHJvb20="
+    );
+  });
+
+  it("suggests media category and room from owner media notes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.type(screen.getByLabelText("Media caption"), "Main daylight room cyclorama angle with softboxes");
+    await user.click(screen.getByRole("button", { name: "Suggest media details" }));
+
+    expect(screen.getByLabelText("Media category")).toHaveValue("room");
+    expect(screen.getByLabelText("Media room")).toHaveValue("lumen-main");
+    expect(screen.getByText("AI suggestion: room media for Main Daylight Room.")).toBeInTheDocument();
+  });
+
   it("lets owners promote and reorder listing media", async () => {
     const user = userEvent.setup();
     render(<App />);
