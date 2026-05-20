@@ -881,6 +881,41 @@ h2 {
   font-weight: 800;
 }
 
+.calendar-agenda-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.calendar-agenda-day {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: #fbf6f0;
+  padding: 12px;
+}
+
+.calendar-agenda-day h3 {
+  font-size: 14px;
+}
+
+.calendar-agenda-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.calendar-agenda-row button {
+  padding: 8px 10px;
+}
+
 .ai-draft-panel {
   display: grid;
   gap: 12px;

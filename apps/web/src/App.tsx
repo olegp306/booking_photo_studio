@@ -1281,6 +1281,23 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
   const nextCalendarDate = blocks
     .map((block) => block.date)
     .sort((firstDate, secondDate) => firstDate.localeCompare(secondDate))[0];
+  const agendaGroups = useMemo(
+    () =>
+      Array.from(
+        blocks
+          .slice()
+          .sort((firstBlock, secondBlock) =>
+            `${firstBlock.date}-${firstBlock.startTime}`.localeCompare(`${secondBlock.date}-${secondBlock.startTime}`)
+          )
+          .reduce((groups, block) => {
+            const group = groups.get(block.date) ?? [];
+            group.push(block);
+            groups.set(block.date, group);
+            return groups;
+          }, new Map<string, OwnerAvailabilityBlock[]>())
+      ),
+    [blocks]
+  );
 
   const blockSlot = async (event: FormEvent) => {
     event.preventDefault();
@@ -1305,6 +1322,18 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
   const releaseBlock = async (block: OwnerAvailabilityBlock) => {
     await onReleaseAvailability(block.id);
     setBlocks((current) => current.filter((currentBlock) => currentBlock.id !== block.id));
+  };
+
+  const duplicateNextWeek = async (block: OwnerAvailabilityBlock) => {
+    const duplicated = await onBlockAvailability({
+      studioSlug: block.studioSlug,
+      roomId: block.roomId,
+      date: addDays(block.date, 7),
+      startTime: block.startTime,
+      kind: block.kind ?? "hold",
+      reason: block.reason
+    });
+    setBlocks((current) => [duplicated, ...current]);
   };
 
   return (
@@ -1405,6 +1434,44 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
           <span>{fullDayCount} full-day {fullDayCount === 1 ? "closure" : "closures"}</span>
           <span>{nextCalendarDate ?? "No upcoming changes"}</span>
         </div>
+      </section>
+
+      <section className="calendar-agenda-panel" aria-label="Calendar agenda">
+        <div>
+          <p className="eyebrow">By day</p>
+          <h2>Calendar agenda</h2>
+        </div>
+        {agendaGroups.length === 0 ? (
+          <p className="empty-state">No calendar changes yet.</p>
+        ) : (
+          agendaGroups.map(([agendaDate, agendaBlocks]) => (
+            <article className="calendar-agenda-day" key={agendaDate}>
+              <h3>
+                {agendaDate} - {agendaBlocks.length} {agendaBlocks.length === 1 ? "change" : "changes"}
+              </h3>
+              {agendaBlocks.map((block) => {
+                const room = studio.rooms.find((candidate) => candidate.id === block.roomId);
+                const blockLabel = block.startTime === "full-day" ? "Full day" : block.startTime;
+                const actionLabel = block.kind === "open" ? "Open" : "Hold";
+                return (
+                  <div className="calendar-agenda-row" key={block.id}>
+                    <span>
+                      {room?.name ?? "Room"} - {blockLabel} - {actionLabel}
+                    </span>
+                    <button
+                      aria-label={`Duplicate ${blockLabel} ${room?.name ?? "Room"} change to next week`}
+                      className="secondary-button"
+                      onClick={() => duplicateNextWeek(block)}
+                      type="button"
+                    >
+                      Next week
+                    </button>
+                  </div>
+                );
+              })}
+            </article>
+          ))
+        )}
       </section>
 
       {blocks.map((block) => {

@@ -426,6 +426,26 @@ describe("App", () => {
     expect(screen.getByText("1 open override")).toBeInTheDocument();
   });
 
+  it("shows owner calendar agenda and duplicates changes to next week", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.selectOptions(screen.getByLabelText("Start time"), "11:00");
+    await user.type(screen.getByLabelText("Block reason"), "Client buffer");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+
+    expect(await screen.findByRole("heading", { name: "Calendar agenda" })).toBeInTheDocument();
+    expect(screen.getByText("2026-06-12 - 1 change")).toBeInTheDocument();
+    expect(screen.getByText("Main Daylight Room - 11:00 - Hold")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Duplicate 11:00 Main Daylight Room change to next week" }));
+
+    expect(await screen.findByText("2026-06-19 - 1 change")).toBeInTheDocument();
+    expect(screen.getAllByText("Main Daylight Room - 11:00 - Hold")).toHaveLength(2);
+  });
+
   it("creates an AI listing draft from owner notes", async () => {
     const user = userEvent.setup();
     render(<App />);
