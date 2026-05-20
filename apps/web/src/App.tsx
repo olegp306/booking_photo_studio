@@ -628,6 +628,17 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
         </section>
 
         <section className="detail-section">
+          <h2>Props and access</h2>
+          <div className="tag-row roomy">
+            {studio.props.map((prop) => (
+              <span key={prop}>{prop}</span>
+            ))}
+          </div>
+          <p className="description">{studio.accessNotes}</p>
+          <p className="description">{studio.cancellationPolicy}</p>
+        </section>
+
+        <section className="detail-section">
           <h2>Rules</h2>
           <ul className="rules-list">
             {studio.rules.map((rule) => (
@@ -1575,6 +1586,9 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaCaption, setMediaCaption] = useState("");
   const [mediaKind, setMediaKind] = useState<StudioImage["kind"]>("room");
+  const [props, setProps] = useState(studio.props.join("\n"));
+  const [accessNotes, setAccessNotes] = useState(studio.accessNotes);
+  const [cancellationPolicy, setCancellationPolicy] = useState(studio.cancellationPolicy);
   const [rules, setRules] = useState(studio.rules.join("\n"));
   const [saved, setSaved] = useState(false);
 
@@ -1589,6 +1603,9 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setAmenityIds(studio.amenityIds);
     setImages(studio.images);
     setRooms(studio.rooms);
+    setProps(studio.props.join("\n"));
+    setAccessNotes(studio.accessNotes);
+    setCancellationPolicy(studio.cancellationPolicy);
     setRules(studio.rules.join("\n"));
   }, [studio]);
 
@@ -1656,6 +1673,10 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       .split("\n")
       .map((rule) => rule.trim())
       .filter(Boolean);
+    const updatedProps = props
+      .split("\n")
+      .map((prop) => prop.trim())
+      .filter(Boolean);
 
     await onUpdateListing(studio, {
       tagline,
@@ -1668,6 +1689,9 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       amenityIds,
       images,
       rooms,
+      props: updatedProps,
+      accessNotes,
+      cancellationPolicy,
       rules: updatedRules
     });
     setSaved(true);
@@ -1934,6 +1958,38 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
           Rules
           <textarea value={rules} onChange={(event) => setRules(event.target.value)} required />
         </label>
+        <section className="listing-operations" aria-label="Listing logistics">
+          <h2>Props and logistics</h2>
+          <label>
+            Props
+            <textarea value={props} onChange={(event) => setProps(event.target.value)} required />
+          </label>
+          <label>
+            Access notes
+            <textarea value={accessNotes} onChange={(event) => setAccessNotes(event.target.value)} required />
+          </label>
+          <label>
+            Cancellation policy
+            <textarea
+              value={cancellationPolicy}
+              onChange={(event) => setCancellationPolicy(event.target.value)}
+              required
+            />
+          </label>
+          <div className="listing-logistics-preview">
+            <div className="tag-row roomy">
+              {props
+                .split("\n")
+                .map((prop) => prop.trim())
+                .filter(Boolean)
+                .map((prop) => (
+                  <span key={prop}>{prop}</span>
+                ))}
+            </div>
+            <p>{accessNotes}</p>
+            <p>{cancellationPolicy}</p>
+          </div>
+        </section>
         <button className="request-button" type="submit">
           Save listing changes
         </button>

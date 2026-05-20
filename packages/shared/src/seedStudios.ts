@@ -31,6 +31,9 @@ export const seedStudios: Studio[] = [
     featureIds: ["natural-light", "cyclorama", "paper-backdrops", "product-table"],
     equipmentIds: ["strobes", "softboxes", "c-stands", "tripods"],
     amenityIds: ["makeup-station", "dressing-room", "elevator", "wifi"],
+    props: ["white plinths", "linen sofa", "paper plants", "neutral stools"],
+    accessNotes: "Elevator access from the courtyard. Freight lift available by request after 19:00.",
+    cancellationPolicy: "Free cancellation until 48 hours before the booking.",
     images: [
       {
         id: "lumen-hero",
@@ -104,6 +107,9 @@ export const seedStudios: Studio[] = [
     featureIds: ["natural-light", "textured-walls", "bedroom-set", "colored-walls"],
     equipmentIds: ["led-panels", "softboxes", "tripods"],
     amenityIds: ["makeup-station", "kitchen", "wifi", "pet-friendly"],
+    props: ["linen bedding", "ceramic vases", "boucle chair", "soft curtains"],
+    accessNotes: "Second-floor apartment studio with elevator. Shoes off in styled rooms.",
+    cancellationPolicy: "Free cancellation until 72 hours before the booking.",
     images: [
       {
         id: "rosa-hero",
@@ -164,6 +170,9 @@ export const seedStudios: Studio[] = [
     featureIds: ["blackout", "paper-backdrops", "product-table"],
     equipmentIds: ["strobes", "continuous-lights", "c-stands", "smoke-machine", "projector"],
     amenityIds: ["parking", "ground-floor", "wifi", "air-conditioning", "dressing-room"],
+    props: ["black plinths", "projector screen", "rolling flats", "industrial stools"],
+    accessNotes: "Ground-floor loading bay with one reserved van spot behind the building.",
+    cancellationPolicy: "Free cancellation until 48 hours before the booking; overtime is billed per started hour.",
     images: [
       {
         id: "frame-hero",

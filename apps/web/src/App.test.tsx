@@ -353,6 +353,27 @@ describe("App", () => {
     expect(screen.getByText("CZK 1,550 / hour")).toBeInTheDocument();
   });
 
+  it("lets owners update props, access notes, and cancellation policy", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+
+    await user.clear(screen.getByLabelText("Props"));
+    await user.type(screen.getByLabelText("Props"), "linen sofa\nwhite plinths\npaper plants");
+    await user.clear(screen.getByLabelText("Access notes"));
+    await user.type(screen.getByLabelText("Access notes"), "Use the freight lift from Pobrezni street after 19:00.");
+    await user.clear(screen.getByLabelText("Cancellation policy"));
+    await user.type(screen.getByLabelText("Cancellation policy"), "Free cancellation until 48 hours before the booking.");
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    expect(screen.getByText("linen sofa")).toBeInTheDocument();
+    expect(screen.getAllByText("Use the freight lift from Pobrezni street after 19:00.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Free cancellation until 48 hours before the booking.").length).toBeGreaterThan(0);
+  });
+
   it("lets owners block calendar slots from booking", async () => {
     const user = userEvent.setup();
     render(<App />);

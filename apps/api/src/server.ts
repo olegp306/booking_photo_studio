@@ -46,6 +46,7 @@ export const buildServer = () => {
     featureIds: [...studio.featureIds],
     equipmentIds: [...studio.equipmentIds],
     amenityIds: [...studio.amenityIds],
+    props: [...studio.props],
     rules: [...studio.rules]
   }));
   const bookingIntents: BookingIntent[] = [];
@@ -452,7 +453,10 @@ export const buildServer = () => {
       amenityIds: request.body.amenityIds ?? current.amenityIds,
       rules: request.body.rules ?? current.rules,
       images: request.body.images ?? current.images,
-      rooms: request.body.rooms ?? current.rooms
+      rooms: request.body.rooms ?? current.rooms,
+      props: request.body.props ?? current.props,
+      accessNotes: request.body.accessNotes ?? current.accessNotes,
+      cancellationPolicy: request.body.cancellationPolicy ?? current.cancellationPolicy
     };
     studios[studioIndex] = updated;
 

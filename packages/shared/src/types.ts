@@ -97,6 +97,9 @@ export interface Studio {
   amenityIds: AmenityId[];
   images: StudioImage[];
   rooms: StudioRoom[];
+  props: string[];
+  accessNotes: string;
+  cancellationPolicy: string;
   rules: string[];
 }
 
@@ -223,4 +226,7 @@ export interface OwnerListingUpdate {
   rules?: string[];
   images?: StudioImage[];
   rooms?: StudioRoom[];
+  props?: string[];
+  accessNotes?: string;
+  cancellationPolicy?: string;
 }

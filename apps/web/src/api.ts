@@ -241,7 +241,10 @@ export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUp
       amenityIds: updates.amenityIds ?? studio.amenityIds,
       rules: updates.rules ?? studio.rules,
       images: updates.images ?? studio.images,
-      rooms: updates.rooms ?? studio.rooms
+      rooms: updates.rooms ?? studio.rooms,
+      props: updates.props ?? studio.props,
+      accessNotes: updates.accessNotes ?? studio.accessNotes,
+      cancellationPolicy: updates.cancellationPolicy ?? studio.cancellationPolicy
     };
   }
 };

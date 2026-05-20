@@ -426,6 +426,28 @@ describe("studio API", () => {
     ]);
   });
 
+  it("lets owners update props, access notes, and cancellation policy", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/owner/studios/studio-lumen-karlin",
+      payload: {
+        props: ["linen sofa", "white plinths", "paper plants"],
+        accessNotes: "Use the freight lift from Pobrezni street after 19:00.",
+        cancellationPolicy: "Free cancellation until 48 hours before the booking."
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().studio).toEqual(
+      expect.objectContaining({
+        props: ["linen sofa", "white plinths", "paper plants"],
+        accessNotes: "Use the freight lift from Pobrezni street after 19:00.",
+        cancellationPolicy: "Free cancellation until 48 hours before the booking."
+      })
+    );
+  });
+
   it("returns customer bookings by guest email", async () => {
     const server = buildServer();
     await server.inject({

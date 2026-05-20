@@ -1127,6 +1127,34 @@ h2 {
   resize: vertical;
 }
 
+.listing-operations {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.listing-operations h2 {
+  font-size: 16px;
+}
+
+.listing-logistics-preview {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: #fbf6f0;
+  padding: 12px;
+}
+
+.listing-logistics-preview p {
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .media-grid {
   display: grid;
   grid-template-columns: 1fr;

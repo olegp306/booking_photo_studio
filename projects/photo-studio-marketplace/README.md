@@ -29,6 +29,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Persisted shortlist decision and note updates on shared links.
 - Owner listing editor with AI-ready draft generation from voice or text notes.
 - Owner room editor for room descriptions, hourly pricing, and room-level booking mode.
+- Owner logistics editor for props, access notes, and cancellation policy.
 - Owner media organizer for categorizing listing images as hero, rooms, examples, equipment, and props.
 
 ## Project Docs
@@ -42,7 +43,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
 3. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
-4. Expand the owner listing editor with structured props, access notes, cancellation policy, and real image upload.
+4. Expand the owner listing editor with real image upload, richer room attributes, and moderation status.
 5. Connect the AI listing assistant to voice input and OpenAI so owners can generate structured listings from spoken notes.
 6. Add AI media helper flows to classify uploaded images as hero, room, example, equipment, or props.
 7. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
