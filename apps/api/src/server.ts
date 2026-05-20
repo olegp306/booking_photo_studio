@@ -24,6 +24,9 @@ import {
   type SharedShortlist,
   type SharedShortlistItem,
   type ShootType,
+  type SupportCategory,
+  type SupportEvent,
+  type SupportTicket,
   type StudioReview,
   type StudioReviewRequest,
   type StudioSearchFilters,
@@ -59,6 +62,18 @@ const defaultSession: UserSession = {
 const isUserRole = (role: unknown): role is UserRole =>
   typeof role === "string" && supportedSessionRoles.includes(role as UserRole);
 
+const supportCategories: SupportCategory[] = [
+  "booking_issue",
+  "studio_info_wrong",
+  "payment",
+  "owner_listing",
+  "idea",
+  "bug"
+];
+
+const isSupportCategory = (category: unknown): category is SupportCategory =>
+  typeof category === "string" && supportCategories.includes(category as SupportCategory);
+
 interface BuildServerOptions {
   config?: Partial<RuntimeConfig>;
   fetch?: FetchLike;
@@ -84,6 +99,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   const shortlistStore = createJsonResourceStore<SharedShortlist>(config.localDataDir, "shared-shortlists.json");
   const availabilityBlockStore = createJsonResourceStore<OwnerAvailabilityBlock>(config.localDataDir, "availability-blocks.json");
   const sessionStore = createJsonResourceStore<UserSession>(config.localDataDir, "sessions.json");
+  const supportTicketStore = createJsonResourceStore<SupportTicket>(config.localDataDir, "support-tickets.json");
   const listingDraftStore = createListingDraftStore(config.localDataDir);
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
@@ -140,6 +156,60 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       session
     };
   });
+
+  app.post<{
+    Body: {
+      category?: unknown;
+      message?: string;
+      includeActivity?: boolean;
+      screen?: string;
+      relatedStudioSlug?: string;
+      relatedBookingId?: string;
+      relatedShortlistId?: string;
+      events?: SupportEvent[];
+      userAgent?: string;
+    };
+  }>("/support/tickets", async (request, reply) => {
+    if (!isSupportCategory(request.body.category)) {
+      return reply.code(400).send({
+        error: "INVALID_SUPPORT_CATEGORY",
+        message: "Support category is required"
+      });
+    }
+
+    const message = request.body.message?.trim();
+    if (!message) {
+      return reply.code(400).send({
+        error: "INVALID_SUPPORT_MESSAGE",
+        message: "Support message is required"
+      });
+    }
+
+    const tickets = await supportTicketStore.list();
+    const ticket: SupportTicket = {
+      id: `support-ticket-${tickets.length + 1}`,
+      category: request.body.category,
+      message,
+      includeActivity: request.body.includeActivity ?? true,
+      session: (await sessionStore.list())[0] ?? defaultSession,
+      screen: request.body.screen?.trim() || "unknown",
+      relatedStudioSlug: request.body.relatedStudioSlug,
+      relatedBookingId: request.body.relatedBookingId,
+      relatedShortlistId: request.body.relatedShortlistId,
+      events: request.body.includeActivity === false ? [] : request.body.events ?? [],
+      userAgent: request.body.userAgent,
+      createdAt: new Date().toISOString()
+    };
+    await supportTicketStore.setAll([ticket, ...tickets]);
+
+    return reply.code(201).send({
+      ticket
+    });
+  });
+
+  app.get("/support/tickets", async () => ({
+    tickets: await supportTicketStore.list()
+  }));
 
   app.post<{
     Body: {

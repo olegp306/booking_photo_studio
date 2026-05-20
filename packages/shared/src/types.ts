@@ -8,6 +8,47 @@ export interface UserSession {
   displayName: string;
 }
 
+export type SupportCategory =
+  | "booking_issue"
+  | "studio_info_wrong"
+  | "payment"
+  | "owner_listing"
+  | "idea"
+  | "bug";
+
+export interface SupportEvent {
+  id: string;
+  type: string;
+  label: string;
+  createdAt: string;
+  metadata?: Record<string, string | number | boolean | undefined>;
+}
+
+export interface SupportTicket {
+  id: string;
+  category: SupportCategory;
+  message: string;
+  includeActivity: boolean;
+  session: UserSession;
+  screen: string;
+  relatedStudioSlug?: string;
+  relatedBookingId?: string;
+  relatedShortlistId?: string;
+  events: SupportEvent[];
+  userAgent?: string;
+  createdAt: string;
+}
+
+export type ReferralSource = "telegram" | "photographer" | "studio_owner" | "direct" | "unknown";
+
+export interface ReferralRecord {
+  id: string;
+  source: ReferralSource;
+  path: string;
+  session: UserSession;
+  createdAt: string;
+}
+
 export type ShootType =
   | "portrait"
   | "fashion"

@@ -502,6 +502,94 @@ describe("studio API", () => {
     expect(response.json().error).toBe("INVALID_SESSION_ROLE");
   });
 
+  it("creates support tickets with session and recent activity context", async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/support/tickets",
+      payload: {
+        category: "idea",
+        message: "I cannot tell whether the slot is confirmed.",
+        includeActivity: true,
+        screen: "#studio/studio-lumen-karlin",
+        relatedStudioSlug: "studio-lumen-karlin",
+        events: [
+          {
+            id: "event-1",
+            type: "open_studio",
+            label: "Opened Studio Lumen Karlin",
+            createdAt: "2026-05-20T10:00:00.000Z",
+            metadata: {
+              studioSlug: "studio-lumen-karlin"
+            }
+          }
+        ],
+        userAgent: "vitest"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().ticket).toEqual(
+      expect.objectContaining({
+        id: "support-ticket-1",
+        category: "idea",
+        message: "I cannot tell whether the slot is confirmed.",
+        includeActivity: true,
+        screen: "#studio/studio-lumen-karlin",
+        relatedStudioSlug: "studio-lumen-karlin",
+        session: expect.objectContaining({
+          role: "photographer"
+        }),
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            type: "open_studio"
+          })
+        ])
+      })
+    );
+  });
+
+  it("persists support tickets across API restarts", async () => {
+    const localDataDir = mkdtempSync(join(tmpdir(), "studio-support-"));
+    const server = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+
+    await server.inject({
+      method: "POST",
+      url: "/support/tickets",
+      payload: {
+        category: "idea",
+        message: "Let photographers save a shortlist template.",
+        includeActivity: false,
+        screen: "#saved",
+        events: []
+      }
+    });
+
+    const restartedServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const response = await restartedServer.inject({
+      method: "GET",
+      url: "/support/tickets"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().tickets).toEqual([
+      expect.objectContaining({
+        id: "support-ticket-1",
+        category: "idea",
+        message: "Let photographers save a shortlist template."
+      })
+    ]);
+  });
+
   it("registers a Telegram listing draft webhook when launch config is ready", async () => {
     const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({

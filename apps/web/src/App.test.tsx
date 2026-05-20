@@ -68,6 +68,108 @@ describe("App", () => {
     expect(within(screen.getByLabelText("Prototype session")).getAllByText("Studio owner").length).toBeGreaterThan(0);
   });
 
+  it("submits support feedback with recent activity context", async () => {
+    const user = userEvent.setup();
+    const supportRequests: Array<unknown> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/support/tickets")) {
+        supportRequests.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            ticket: {
+              id: "support-ticket-1",
+              category: "booking_issue",
+              message: "I cannot tell if this slot is confirmed.",
+              includeActivity: true,
+              screen: "#studio/studio-lumen-karlin",
+              session: {
+                id: "demo-session",
+                role: "photographer",
+                displayName: "Marta Photographer"
+              },
+              events: [],
+              createdAt: "2026-05-20T10:00:00.000Z"
+            }
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(screen.getByRole("button", { name: "Open support" }));
+    expect(screen.queryByLabelText("Support category")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Support message"), "I cannot tell if this slot is confirmed.");
+    await user.click(screen.getByRole("button", { name: "Send support request" }));
+
+    expect(await screen.findByText("Support request sent.")).toBeInTheDocument();
+    expect(supportRequests[0]).toEqual(
+      expect.objectContaining({
+        category: "idea",
+        message: "I cannot tell if this slot is confirmed.",
+        includeActivity: true,
+        relatedStudioSlug: "studio-lumen-karlin",
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            type: "open_studio"
+          })
+        ])
+      })
+    );
+  });
+
+  it("shows support inbox with submitted context in the owner dashboard", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/support/tickets")) {
+        return new Response(
+          JSON.stringify({
+            tickets: [
+              {
+                id: "support-ticket-1",
+                category: "idea",
+                message: "Add a clearer confirmed slot state.",
+                includeActivity: true,
+                screen: "#bookings",
+                relatedStudioSlug: "studio-lumen-karlin",
+                session: {
+                  id: "demo-session",
+                  role: "photographer",
+                  displayName: "Marta Photographer"
+                },
+                events: [
+                  {
+                    id: "event-1",
+                    type: "open_studio",
+                    label: "Opened Studio Lumen Karlin",
+                    createdAt: "2026-05-20T10:00:00.000Z"
+                  }
+                ],
+                createdAt: "2026-05-20T10:01:00.000Z"
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Support" }));
+
+    expect((await screen.findAllByRole("heading", { name: "Support inbox" })).length).toBeGreaterThan(0);
+    expect(screen.getByText("Add a clearer confirmed slot state.")).toBeInTheDocument();
+    expect(screen.getByText("Marta Photographer - Photographer")).toBeInTheDocument();
+    expect(screen.getByText("#bookings")).toBeInTheDocument();
+    expect(screen.getByText("Opened Studio Lumen Karlin")).toBeInTheDocument();
+  });
+
   it("filters studios by shoot type", async () => {
     const user = userEvent.setup();
     render(<App />);

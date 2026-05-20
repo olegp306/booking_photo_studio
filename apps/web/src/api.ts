@@ -25,6 +25,9 @@ import {
   type StudioReviewRequest,
   type StudioRoom,
   type StudioSearchFilters,
+  type SupportCategory,
+  type SupportEvent,
+  type SupportTicket,
   type UserRole,
   type UserSession
 } from "@studio-market/shared";
@@ -32,7 +35,7 @@ import {
 const API_BASE = "/api";
 export type AiDraftMode = "local-fallback" | "openai";
 export type ImportedDraftMode = "local-fallback" | "openai";
-export type { UserRole, UserSession };
+export type { SupportCategory, SupportEvent, SupportTicket, UserRole, UserSession };
 
 export interface LaunchServiceReadiness {
   configured: boolean;
@@ -79,8 +82,21 @@ export interface MediaSuggestionResult {
   };
 }
 
+export interface SupportTicketRequest {
+  category: SupportCategory;
+  message: string;
+  includeActivity: boolean;
+  screen: string;
+  relatedStudioSlug?: string;
+  relatedBookingId?: string;
+  relatedShortlistId?: string;
+  events: SupportEvent[];
+  userAgent?: string;
+}
+
 const localShortlists = new Map<string, SharedShortlist>();
 const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
+const localSupportTickets: SupportTicket[] = [];
 let localSession: UserSession = {
   id: "demo-session",
   role: "photographer",
@@ -194,6 +210,41 @@ export const updateSessionRole = async (role: UserRole): Promise<UserSession> =>
   } catch {
     localSession = fallbackSession;
     return fallbackSession;
+  }
+};
+
+export const createSupportTicket = async (request: SupportTicketRequest): Promise<SupportTicket> => {
+  try {
+    const response = await fetch(`${API_BASE}/support/tickets`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+    if (!response.ok) throw new Error("Failed to create support ticket");
+    const payload = (await response.json()) as { ticket: SupportTicket };
+    return payload.ticket;
+  } catch {
+    const ticket: SupportTicket = {
+      id: `local-support-ticket-${localSupportTickets.length + 1}`,
+      ...request,
+      session: localSession,
+      createdAt: new Date().toISOString()
+    };
+    localSupportTickets.unshift(ticket);
+    return ticket;
+  }
+};
+
+export const loadSupportTickets = async (): Promise<SupportTicket[]> => {
+  try {
+    const response = await fetch(`${API_BASE}/support/tickets`);
+    if (!response.ok) throw new Error("Failed to load support tickets");
+    const payload = (await response.json()) as { tickets: SupportTicket[] };
+    return payload.tickets;
+  } catch {
+    return localSupportTickets;
   }
 };
 
@@ -548,6 +599,7 @@ export const releaseOwnerAvailabilityBlock = async (blockId: string): Promise<vo
 export const resetLocalApiStateForTests = () => {
   localShortlists.clear();
   localAvailabilityBlocks.splice(0, localAvailabilityBlocks.length);
+  localSupportTickets.splice(0, localSupportTickets.length);
   localSession = {
     id: "demo-session",
     role: "photographer",

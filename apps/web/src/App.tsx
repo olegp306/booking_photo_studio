@@ -44,6 +44,7 @@ import {
   confirmBookingPayment,
   createOwnerAvailabilityBlock,
   createSharedShortlist,
+  createSupportTicket,
   decideOwnerBooking,
   generateListingDraft,
   loadSession,
@@ -55,6 +56,7 @@ import {
   loadOwnerBookings,
   loadSharedShortlist,
   loadStudios,
+  loadSupportTickets,
   loadTelegramMiniAppDrafts,
   releaseOwnerAvailabilityBlock,
   setupTelegramWebhook,
@@ -67,6 +69,8 @@ import {
   type ImportedListingDraft,
   type MediaSuggestionResult,
   type LaunchReadiness,
+  type SupportEvent,
+  type SupportTicket,
   type UserRole,
   type UserSession
 } from "./api";
@@ -109,7 +113,7 @@ const mediaKindLabels: Record<StudioImage["kind"], string> = {
 };
 type AppView = "explore" | "saved" | "bookings" | "host";
 type ExtendedAppView = AppView | "telegram-drafts";
-type OwnerDashboardTab = "requests" | "calendar" | "listing" | "launch";
+type OwnerDashboardTab = "requests" | "calendar" | "listing" | "support" | "launch";
 type BookingMessageAuthor = "guest" | "studio";
 
 interface BookingMessage {
@@ -176,6 +180,8 @@ export const App = () => {
   const [shortlistItems, setShortlistItems] = useState<Record<string, SharedShortlistItem>>({});
   const [activeShortlistId, setActiveShortlistId] = useState<string | undefined>();
   const [ownerInitialTab, setOwnerInitialTab] = useState<OwnerDashboardTab>("requests");
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportEvents, setSupportEvents] = useState<SupportEvent[]>([]);
   const [session, setSession] = useState<UserSession>({
     id: "demo-session",
     role: "photographer",
@@ -316,7 +322,23 @@ export const App = () => {
     }));
   };
 
+  const trackSupportEvent = (type: string, label: string, metadata?: SupportEvent["metadata"]) => {
+    setSupportEvents((current) =>
+      [
+        {
+          id: `support-event-${Date.now()}`,
+          type,
+          label,
+          metadata,
+          createdAt: new Date().toISOString()
+        },
+        ...current
+      ].slice(0, 30)
+    );
+  };
+
   const openStudio = (studio: Studio) => {
+    trackSupportEvent("open_studio", `Opened ${studio.name}`, { studioSlug: studio.slug });
     window.location.hash = `studio/${studio.slug}`;
     setSelectedStudio(studio);
     setView("explore");
@@ -332,47 +354,64 @@ export const App = () => {
     setSession(updated);
   };
 
+  const supportLayer = (
+    <SupportLayer
+      events={supportEvents}
+      isOpen={supportOpen}
+      onClose={() => setSupportOpen(false)}
+      onOpen={() => setSupportOpen(true)}
+      relatedStudioSlug={selectedStudio?.slug}
+      screen={window.location.hash || "#explore"}
+    />
+  );
+
   if (selectedStudio) {
     return (
-      <StudioDetail
-        studio={selectedStudio}
-        isSaved={saved.has(selectedStudio.slug)}
-        onBack={closeStudio}
-        onBookingCreated={(booking) => {
-          setLastGuestEmail(booking.guestEmail);
-          setOwnerBookings((current) => [booking, ...current.filter((item) => item.id !== booking.id)]);
-          setCustomerBookings((current) => [booking, ...current.filter((item) => item.id !== booking.id)]);
-        }}
-        onSave={() => toggleSaved(selectedStudio.slug)}
-      />
+      <>
+        <StudioDetail
+          studio={selectedStudio}
+          isSaved={saved.has(selectedStudio.slug)}
+          onBack={closeStudio}
+          onBookingCreated={(booking) => {
+            setLastGuestEmail(booking.guestEmail);
+            setOwnerBookings((current) => [booking, ...current.filter((item) => item.id !== booking.id)]);
+            setCustomerBookings((current) => [booking, ...current.filter((item) => item.id !== booking.id)]);
+          }}
+          onSave={() => toggleSaved(selectedStudio.slug)}
+        />
+        {supportLayer}
+      </>
     );
   }
 
   if (view === "bookings") {
     return (
-      <CustomerBookings
-        bookings={customerBookings}
-        messages={bookingMessages}
-        onBackToExplore={() => setView("explore")}
-        onConfirmPayment={async (booking) => {
-          const updated = await confirmBookingPayment(booking);
-          setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-          setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-          return updated;
-        }}
-        onSubmitReview={async (booking, rating, comment) => {
-          const studio = studios.find((candidate) => candidate.slug === booking.studioSlug);
-          if (!studio) throw new Error("Studio was not found");
-          const result = await submitBookingReview(booking, { rating, comment }, studio);
-          setStudios((current) =>
-            current.map((candidate) => (candidate.slug === result.studio.slug ? result.studio : candidate))
-          );
-          return result.studio;
-        }}
-        onOpenSaved={() => setView("saved")}
-        onOpenHost={() => setView("host")}
-        onSendMessage={(booking, body) => sendBookingMessage(booking, "guest", body)}
-      />
+      <>
+        <CustomerBookings
+          bookings={customerBookings}
+          messages={bookingMessages}
+          onBackToExplore={() => setView("explore")}
+          onConfirmPayment={async (booking) => {
+            const updated = await confirmBookingPayment(booking);
+            setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+            setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+            return updated;
+          }}
+          onSubmitReview={async (booking, rating, comment) => {
+            const studio = studios.find((candidate) => candidate.slug === booking.studioSlug);
+            if (!studio) throw new Error("Studio was not found");
+            const result = await submitBookingReview(booking, { rating, comment }, studio);
+            setStudios((current) =>
+              current.map((candidate) => (candidate.slug === result.studio.slug ? result.studio : candidate))
+            );
+            return result.studio;
+          }}
+          onOpenSaved={() => setView("saved")}
+          onOpenHost={() => setView("host")}
+          onSendMessage={(booking, body) => sendBookingMessage(booking, "guest", body)}
+        />
+        {supportLayer}
+      </>
     );
   }
 
@@ -380,80 +419,90 @@ export const App = () => {
     const savedStudios = studios.filter((studio) => saved.has(studio.slug));
 
     return (
-      <SavedStudios
-        savedCount={saved.size}
-        savedStudios={savedStudios}
-        sharedShortlistId={activeShortlistId}
-        shortlistItems={shortlistItems}
-        onBackToExplore={() => setView("explore")}
-        onChangeShortlistItem={updateShortlistItem}
-        onOpenBookings={() => setView("bookings")}
-        onOpenHost={() => setView("host")}
-        onOpenStudio={openStudio}
-        onSave={toggleSaved}
-        onShortlistCreated={(shortlist) => {
-          setActiveShortlistId(shortlist.id);
-          setShortlistItems(
-            Object.fromEntries(shortlist.items.map((item) => [item.studioSlug, item])) as Record<
-              string,
-              SharedShortlistItem
-            >
-          );
-        }}
-      />
+      <>
+        <SavedStudios
+          savedCount={saved.size}
+          savedStudios={savedStudios}
+          sharedShortlistId={activeShortlistId}
+          shortlistItems={shortlistItems}
+          onBackToExplore={() => setView("explore")}
+          onChangeShortlistItem={updateShortlistItem}
+          onOpenBookings={() => setView("bookings")}
+          onOpenHost={() => setView("host")}
+          onOpenStudio={openStudio}
+          onSave={toggleSaved}
+          onShortlistCreated={(shortlist) => {
+            setActiveShortlistId(shortlist.id);
+            setShortlistItems(
+              Object.fromEntries(shortlist.items.map((item) => [item.studioSlug, item])) as Record<
+                string,
+                SharedShortlistItem
+              >
+            );
+          }}
+        />
+        {supportLayer}
+      </>
     );
   }
 
   if (view === "host") {
     return (
-      <OwnerDashboard
-        bookings={ownerBookings}
-        messages={bookingMessages}
-        onBackToExplore={() => setView("explore")}
-        onOpenSaved={() => setView("saved")}
-        onOpenBookings={() => setView("bookings")}
-        initialTab={ownerInitialTab}
-        studio={studios[0]}
-        onDecideBooking={async (booking, decision) => {
-          const updated = await decideOwnerBooking(booking, decision);
-          setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-          setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-        }}
-        onCompleteBooking={async (booking) => {
-          const updated = await completeOwnerBooking(booking);
-          setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-          setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-        }}
-        onSendMessage={(booking, body) => sendBookingMessage(booking, "studio", body)}
-        onBlockAvailability={createOwnerAvailabilityBlock}
-        onReleaseAvailability={releaseOwnerAvailabilityBlock}
-        onUpdateListing={async (studio, updates) => {
-          const updated = await updateOwnerListing(studio, updates);
-          setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
-          return updated;
-        }}
-        session={session}
-        onChangeSessionRole={changeSessionRole}
-      />
+      <>
+        <OwnerDashboard
+          bookings={ownerBookings}
+          messages={bookingMessages}
+          onBackToExplore={() => setView("explore")}
+          onOpenSaved={() => setView("saved")}
+          onOpenBookings={() => setView("bookings")}
+          initialTab={ownerInitialTab}
+          studio={studios[0]}
+          onDecideBooking={async (booking, decision) => {
+            const updated = await decideOwnerBooking(booking, decision);
+            setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+            setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+          }}
+          onCompleteBooking={async (booking) => {
+            const updated = await completeOwnerBooking(booking);
+            setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+            setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+          }}
+          onSendMessage={(booking, body) => sendBookingMessage(booking, "studio", body)}
+          onBlockAvailability={createOwnerAvailabilityBlock}
+          onReleaseAvailability={releaseOwnerAvailabilityBlock}
+          onUpdateListing={async (studio, updates) => {
+            const updated = await updateOwnerListing(studio, updates);
+            setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
+            return updated;
+          }}
+          session={session}
+          onChangeSessionRole={changeSessionRole}
+        />
+        {supportLayer}
+      </>
     );
   }
 
   if (view === "telegram-drafts") {
     return (
-      <TelegramDraftInbox
-        onBackToExplore={() => setView("explore")}
-        onOpenEditor={() => {
-          window.location.hash = "profile";
-          setOwnerInitialTab("listing");
-          setView("host");
-        }}
-      />
+      <>
+        <TelegramDraftInbox
+          onBackToExplore={() => setView("explore")}
+          onOpenEditor={() => {
+            window.location.hash = "profile";
+            setOwnerInitialTab("listing");
+            setView("host");
+          }}
+        />
+        {supportLayer}
+      </>
     );
   }
 
   return (
-    <main className="app-shell">
-      <section className="hero-band">
+    <>
+      <main className="app-shell">
+        <section className="hero-band">
         <div className="top-bar">
           <div>
             <p className="eyebrow">Prague launch</p>
@@ -539,7 +588,9 @@ export const App = () => {
           Host
         </a>
       </nav>
-    </main>
+      </main>
+      {supportLayer}
+    </>
   );
 };
 
@@ -572,6 +623,99 @@ const AccountSwitcher = ({ session, onChangeRole }: AccountSwitcherProps) => (
     </div>
   </section>
 );
+
+interface SupportLayerProps {
+  events: SupportEvent[];
+  isOpen: boolean;
+  onClose: () => void;
+  onOpen: () => void;
+  relatedStudioSlug?: string;
+  screen: string;
+}
+
+const SupportLayer = ({ events, isOpen, onClose, onOpen, relatedStudioSlug, screen }: SupportLayerProps) => (
+  <>
+    <button className="support-fab" onClick={onOpen} type="button" aria-label="Open support">
+      Help
+    </button>
+    {isOpen && (
+      <SupportDrawer
+        events={events}
+        onClose={onClose}
+        relatedStudioSlug={relatedStudioSlug}
+        screen={screen}
+      />
+    )}
+  </>
+);
+
+interface SupportDrawerProps {
+  events: SupportEvent[];
+  onClose: () => void;
+  relatedStudioSlug?: string;
+  screen: string;
+}
+
+const SupportDrawer = ({ events, onClose, relatedStudioSlug, screen }: SupportDrawerProps) => {
+  const [message, setMessage] = useState("");
+  const [includeActivity, setIncludeActivity] = useState(true);
+  const [status, setStatus] = useState("");
+
+  const submitSupportTicket = async (event: FormEvent) => {
+    event.preventDefault();
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) return;
+
+    await createSupportTicket({
+      category: "idea",
+      message: trimmedMessage,
+      includeActivity,
+      screen,
+      relatedStudioSlug,
+      events: includeActivity ? events : [],
+      userAgent: navigator.userAgent
+    });
+    setMessage("");
+    setStatus("Support request sent.");
+  };
+
+  return (
+    <aside className="support-drawer" aria-label="Support">
+      <div className="support-drawer-head">
+        <div>
+          <p className="eyebrow">Support</p>
+          <h2>Tell us what happened</h2>
+        </div>
+        <button className="icon-button" onClick={onClose} type="button" aria-label="Close support">
+          <X size={18} />
+        </button>
+      </div>
+      <form className="support-form" onSubmit={submitSupportTicket}>
+        <label>
+          Support message
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            placeholder="Describe the issue, idea, or confusing step."
+            required
+          />
+        </label>
+        <label className="support-consent">
+          <input
+            checked={includeActivity}
+            onChange={(event) => setIncludeActivity(event.target.checked)}
+            type="checkbox"
+          />
+          Include recent activity
+        </label>
+        <button className="request-button" type="submit">
+          Send support request
+        </button>
+      </form>
+      {status && <p className="booking-status">{status}</p>}
+    </aside>
+  );
+};
 
 interface StudioCardProps {
   studio: Studio;
@@ -1422,7 +1566,9 @@ const OwnerDashboard = ({
         ? "Calendar"
         : activeTab === "listing"
           ? "Manage listing"
-          : "Launch readiness";
+          : activeTab === "support"
+            ? "Support inbox"
+            : "Launch readiness";
   const ownerSummary =
     activeTab === "requests"
       ? {
@@ -1442,6 +1588,12 @@ const OwnerDashboard = ({
               title: studio?.name ?? "Studio listing",
               text: "Keep the public studio profile ready for photographers and clients."
             }
+          : activeTab === "support"
+            ? {
+                icon: <Inbox size={20} />,
+                title: "Product feedback",
+                text: "Read user context and turn repeated friction into improvements."
+              }
           : {
               icon: <Sparkles size={20} />,
               title: "Integrations setup",
@@ -1491,6 +1643,13 @@ const OwnerDashboard = ({
             Listing
           </button>
           <button
+            className={activeTab === "support" ? "active" : ""}
+            onClick={() => setActiveTab("support")}
+            type="button"
+          >
+            Support
+          </button>
+          <button
             className={activeTab === "launch" ? "active" : ""}
             onClick={() => setActiveTab("launch")}
             type="button"
@@ -1515,6 +1674,8 @@ const OwnerDashboard = ({
           onLoadAvailabilityBlocks={loadOwnerAvailabilityBlocks}
           onReleaseAvailability={onReleaseAvailability}
         />
+      ) : activeTab === "support" ? (
+        <SupportInbox />
       ) : activeTab === "launch" ? (
         <OwnerLaunchReadiness />
       ) : studio ? (
@@ -1547,6 +1708,58 @@ const OwnerDashboard = ({
         </a>
       </nav>
     </main>
+  );
+};
+
+const SupportInbox = () => {
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+
+  useEffect(() => {
+    loadSupportTickets().then(setTickets);
+  }, []);
+
+  return (
+    <section className="owner-list support-inbox" aria-label="Support inbox">
+      <article className="support-inbox-hero">
+        <div>
+          <p className="eyebrow">Feedback loop</p>
+          <h2>Support inbox</h2>
+          <p>Use incoming context to spot confusing flows, missing data, and new feature requests.</p>
+        </div>
+        <span className="status-pill">{tickets.length} open</span>
+      </article>
+
+      {tickets.length === 0 ? (
+        <div className="empty-state">
+          <h2>No support tickets yet</h2>
+          <p>New reports will include the screen, role, message, and recent activity when the user allows it.</p>
+        </div>
+      ) : (
+        tickets.map((ticket) => (
+          <article className="support-ticket-card" key={ticket.id}>
+            <div className="owner-request-head">
+              <div>
+                <p className="eyebrow">{ticket.id}</p>
+                <h2>{ticket.message}</h2>
+              </div>
+              <span className="status-pill">{ticket.category}</span>
+            </div>
+            <p>{ticket.session.displayName} - {roleLabels[ticket.session.role]}</p>
+            <div className="support-ticket-meta">
+              <span>{ticket.screen}</span>
+              {ticket.relatedStudioSlug && <span>{ticket.relatedStudioSlug}</span>}
+            </div>
+            {ticket.events.length > 0 && (
+              <div className="support-event-list" aria-label={`${ticket.id} recent activity`}>
+                {ticket.events.slice(0, 4).map((event) => (
+                  <span key={event.id}>{event.label}</span>
+                ))}
+              </div>
+            )}
+          </article>
+        ))
+      )}
+    </section>
   );
 };
 
