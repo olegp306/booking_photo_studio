@@ -577,7 +577,7 @@ Expected: PASS.
 - Modify: `apps/web/src/App.tsx`
 - Modify: `apps/web/src/App.test.tsx`
 
-- [ ] **Step 1: Write failing API referral test**
+- [x] **Step 1: Write failing API referral test**
 
 Add:
 
@@ -608,7 +608,7 @@ it("captures referral source visits", async () => {
 });
 ```
 
-- [ ] **Step 2: Add API implementation**
+- [x] **Step 2: Add API implementation**
 
 In `apps/api/src/server.ts`, import `ReferralRecord`, `ReferralSource`.
 
@@ -651,7 +651,7 @@ app.post<{
 });
 ```
 
-- [ ] **Step 3: Add frontend referral detection**
+- [x] **Step 3: Add frontend referral detection**
 
 In `apps/web/src/api.ts`, add:
 
@@ -692,7 +692,7 @@ useEffect(() => {
 }, []);
 ```
 
-- [ ] **Step 4: Verify targeted tests**
+- [x] **Step 4: Verify targeted tests**
 
 Run:
 
@@ -712,7 +712,7 @@ Expected: PASS.
 - Modify: `apps/api/src/server.ts`
 - Modify: `projects/photo-studio-marketplace/README.md`
 
-- [ ] **Step 1: Write failing public-safe studio API test**
+- [x] **Step 1: Write failing public-safe studio API test**
 
 Add:
 
@@ -739,7 +739,7 @@ it("returns public-safe studio fields without owner operational context", async 
 });
 ```
 
-- [ ] **Step 2: Implement public-safe endpoint**
+- [x] **Step 2: Implement public-safe endpoint**
 
 In `apps/api/src/server.ts`, add helper:
 
@@ -799,7 +799,7 @@ app.get<{ Params: { slug: string } }>("/public/studios/:slug", async (request, r
 });
 ```
 
-- [ ] **Step 3: Document protection posture**
+- [x] **Step 3: Document protection posture**
 
 In README Current Build, add:
 
@@ -814,7 +814,7 @@ In roadmap, keep:
 - Add production rate limiting, bot protection, and permission checks around owner/admin endpoints.
 ```
 
-- [ ] **Step 4: Verify targeted API test**
+- [x] **Step 4: Verify targeted API test**
 
 Run: `npm run test -w apps/api -- src/server.test.ts -t "public-safe studio"`
 
@@ -827,7 +827,7 @@ Expected: PASS.
 **Files:**
 - All touched files.
 
-- [ ] **Step 1: Run full verification**
+- [x] **Step 1: Run full verification**
 
 Run:
 
@@ -844,7 +844,7 @@ Expected:
 - Build passes.
 - Diff check has no whitespace errors.
 
-- [ ] **Step 2: Browser smoke**
+- [x] **Step 2: Browser smoke**
 
 Open `http://localhost:5173/?v=support-intelligence#explore`.
 

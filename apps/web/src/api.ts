@@ -16,6 +16,7 @@ import {
   type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
+  type ReferralSource,
   type SharedShortlist,
   type SharedShortlistItem,
   type Studio,
@@ -35,7 +36,7 @@ import {
 const API_BASE = "/api";
 export type AiDraftMode = "local-fallback" | "openai";
 export type ImportedDraftMode = "local-fallback" | "openai";
-export type { SupportCategory, SupportEvent, SupportTicket, UserRole, UserSession };
+export type { ReferralSource, SupportCategory, SupportEvent, SupportTicket, UserRole, UserSession };
 
 export interface LaunchServiceReadiness {
   configured: boolean;
@@ -245,6 +246,23 @@ export const loadSupportTickets = async (): Promise<SupportTicket[]> => {
     return payload.tickets;
   } catch {
     return localSupportTickets;
+  }
+};
+
+export const trackReferralSource = async (source: ReferralSource, path: string): Promise<void> => {
+  try {
+    await fetch(`${API_BASE}/referrals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        source,
+        path
+      })
+    });
+  } catch {
+    return undefined;
   }
 };
 

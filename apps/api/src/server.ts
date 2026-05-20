@@ -23,7 +23,10 @@ import {
   type OwnerAvailabilityBlock,
   type SharedShortlist,
   type SharedShortlistItem,
+  type ReferralRecord,
+  type ReferralSource,
   type ShootType,
+  type Studio,
   type SupportCategory,
   type SupportEvent,
   type SupportTicket,
@@ -74,6 +77,10 @@ const supportCategories: SupportCategory[] = [
 const isSupportCategory = (category: unknown): category is SupportCategory =>
   typeof category === "string" && supportCategories.includes(category as SupportCategory);
 
+const referralSources: ReferralSource[] = ["telegram", "photographer", "studio_owner", "direct", "unknown"];
+const isReferralSource = (source: unknown): source is ReferralSource =>
+  typeof source === "string" && referralSources.includes(source as ReferralSource);
+
 interface BuildServerOptions {
   config?: Partial<RuntimeConfig>;
   fetch?: FetchLike;
@@ -100,6 +107,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   const availabilityBlockStore = createJsonResourceStore<OwnerAvailabilityBlock>(config.localDataDir, "availability-blocks.json");
   const sessionStore = createJsonResourceStore<UserSession>(config.localDataDir, "sessions.json");
   const supportTicketStore = createJsonResourceStore<SupportTicket>(config.localDataDir, "support-tickets.json");
+  const referralStore = createJsonResourceStore<ReferralRecord>(config.localDataDir, "referrals.json");
   const listingDraftStore = createListingDraftStore(config.localDataDir);
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
@@ -115,6 +123,32 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     block.roomId === slot.roomId &&
     block.date === slot.date &&
     block.startTime === slot.startTime;
+  const toPublicStudio = (studio: Studio) => ({
+    id: studio.id,
+    slug: studio.slug,
+    name: studio.name,
+    city: studio.city,
+    district: studio.district,
+    addressHint: studio.addressHint,
+    latitude: studio.latitude,
+    longitude: studio.longitude,
+    rating: studio.rating,
+    reviewCount: studio.reviewCount,
+    priceFrom: studio.priceFrom,
+    currency: studio.currency,
+    bookingMode: studio.bookingMode,
+    tagline: studio.tagline,
+    description: studio.description,
+    moodTags: studio.moodTags,
+    shootTypes: studio.shootTypes,
+    featureIds: studio.featureIds,
+    equipmentIds: studio.equipmentIds,
+    amenityIds: studio.amenityIds,
+    images: studio.images,
+    rooms: studio.rooms,
+    props: studio.props,
+    rules: studio.rules
+  });
 
   app.register(cors, {
     origin: true
@@ -210,6 +244,27 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.get("/support/tickets", async () => ({
     tickets: await supportTicketStore.list()
   }));
+
+  app.post<{
+    Body: {
+      source?: unknown;
+      path?: string;
+    };
+  }>("/referrals", async (request, reply) => {
+    const referrals = await referralStore.list();
+    const referral: ReferralRecord = {
+      id: `referral-${referrals.length + 1}`,
+      source: isReferralSource(request.body.source) ? request.body.source : "unknown",
+      path: request.body.path?.trim() || "unknown",
+      session: (await sessionStore.list())[0] ?? defaultSession,
+      createdAt: new Date().toISOString()
+    };
+    await referralStore.setAll([referral, ...referrals]);
+
+    return reply.code(201).send({
+      referral
+    });
+  });
 
   app.post<{
     Body: {
@@ -392,6 +447,19 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     }
 
     return { studio };
+  });
+
+  app.get<{ Params: { slug: string } }>("/public/studios/:slug", async (request, reply) => {
+    const studio = findStudioBySlug(studios, request.params.slug);
+
+    if (!studio) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    return { studio: toPublicStudio(studio) };
   });
 
   app.get<{

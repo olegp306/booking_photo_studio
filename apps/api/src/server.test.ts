@@ -590,6 +590,31 @@ describe("studio API", () => {
     ]);
   });
 
+  it("captures referral source visits", async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/referrals",
+      payload: {
+        source: "photographer",
+        path: "#studio/studio-lumen-karlin"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().referral).toEqual(
+      expect.objectContaining({
+        id: "referral-1",
+        source: "photographer",
+        path: "#studio/studio-lumen-karlin",
+        session: expect.objectContaining({
+          role: "photographer"
+        })
+      })
+    );
+  });
+
   it("registers a Telegram listing draft webhook when launch config is ready", async () => {
     const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({
@@ -694,6 +719,32 @@ describe("studio API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().studio.name).toBe("Studio Lumen Karlin");
+  });
+
+  it("returns a public-safe studio detail payload", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "GET",
+      url: "/public/studios/studio-lumen-karlin"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().studio).toEqual(
+      expect.objectContaining({
+        slug: "studio-lumen-karlin",
+        name: "Studio Lumen Karlin",
+        rooms: expect.arrayContaining([
+          expect.objectContaining({
+            id: "lumen-main",
+            name: "Main Daylight Room"
+          })
+        ])
+      })
+    );
+    expect(JSON.stringify(response.json().studio)).not.toContain("ownerName");
+    expect(JSON.stringify(response.json().studio)).not.toContain("accessNotes");
+    expect(JSON.stringify(response.json().studio)).not.toContain("cancellationPolicy");
+    expect(JSON.stringify(response.json().studio)).not.toContain("listingStatus");
   });
 
   it("returns 404 for missing studio", async () => {

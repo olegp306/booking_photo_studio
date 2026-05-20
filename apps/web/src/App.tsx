@@ -63,12 +63,14 @@ import {
   submitBookingReview,
   submitBookingRequest,
   suggestMediaDetails as suggestMediaDetailsFromApi,
+  trackReferralSource,
   updateOwnerListing,
   updateSessionRole,
   updateSharedShortlist,
   type ImportedListingDraft,
   type MediaSuggestionResult,
   type LaunchReadiness,
+  type ReferralSource,
   type SupportEvent,
   type SupportTicket,
   type UserRole,
@@ -165,6 +167,16 @@ const shortlistIdFromHash = () => {
   return window.location.hash.startsWith(prefix) ? window.location.hash.slice(prefix.length) : undefined;
 };
 
+const referralSourceFromLocation = (): ReferralSource | undefined => {
+  const source = new URLSearchParams(window.location.search).get("ref");
+
+  if (source === "telegram" || source === "photographer" || source === "studio_owner" || source === "direct") {
+    return source;
+  }
+
+  return undefined;
+};
+
 export const App = () => {
   const [studios, setStudios] = useState<Studio[]>([]);
   const [activeShootType, setActiveShootType] = useState<ShootType | undefined>();
@@ -203,6 +215,13 @@ export const App = () => {
 
   useEffect(() => {
     loadSession().then(setSession);
+  }, []);
+
+  useEffect(() => {
+    const source = referralSourceFromLocation();
+    if (!source) return;
+
+    trackReferralSource(source, `${window.location.search}${window.location.hash}`).catch(() => undefined);
   }, []);
 
   useEffect(() => {

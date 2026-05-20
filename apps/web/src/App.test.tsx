@@ -6,6 +6,7 @@ import { resetLocalApiStateForTests } from "./api";
 
 describe("App", () => {
   beforeEach(() => {
+    window.history.pushState({}, "", "/");
     window.location.hash = "";
     vi.restoreAllMocks();
     resetLocalApiStateForTests();
@@ -66,6 +67,45 @@ describe("App", () => {
 
     expect(await screen.findByText("Studio Lumen Owner")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Prototype session")).getAllByText("Studio owner").length).toBeGreaterThan(0);
+  });
+
+  it("tracks referral source visits from URL attribution", async () => {
+    const referralRequests: Array<unknown> = [];
+    window.history.pushState({}, "", "/?ref=telegram#studio/studio-lumen-karlin");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/referrals")) {
+        referralRequests.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            referral: {
+              id: "referral-1",
+              source: "telegram",
+              path: "?ref=telegram#studio/studio-lumen-karlin",
+              session: {
+                id: "demo-session",
+                role: "photographer",
+                displayName: "Marta Photographer"
+              },
+              createdAt: "2026-05-20T10:00:00.000Z"
+            }
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(referralRequests).toEqual([
+        {
+          source: "telegram",
+          path: "?ref=telegram#studio/studio-lumen-karlin"
+        }
+      ]);
+    });
   });
 
   it("submits support feedback with recent activity context", async () => {
