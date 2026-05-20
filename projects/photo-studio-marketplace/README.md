@@ -19,6 +19,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Shareable saved shortlists for sending several studio options at once.
 - Collaborative shortlist decisions and notes for client-photographer review.
 - Persisted shared shortlist resources with short `#shortlist/<id>` links.
+- Persisted shortlist decision and note updates on shared links.
 - Owner listing editor with AI-ready draft generation from voice or text notes.
 - Owner media organizer for categorizing listing images as hero, rooms, examples, equipment, and props.
 

@@ -248,4 +248,53 @@ describe("studio API", () => {
       }
     ]);
   });
+
+  it("updates shared shortlist decisions and notes", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/shortlists",
+      payload: {
+        studioSlugs: ["studio-lumen-karlin", "atelier-rosa-vinohrady"]
+      }
+    });
+
+    const updated = await server.inject({
+      method: "PATCH",
+      url: "/shortlists/shortlist-1",
+      payload: {
+        items: [
+          {
+            studioSlug: "studio-lumen-karlin",
+            decision: "favourite",
+            note: "Client prefers daylight."
+          },
+          {
+            studioSlug: "atelier-rosa-vinohrady",
+            decision: "backup"
+          }
+        ]
+      }
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().shortlist.items).toEqual([
+      {
+        studioSlug: "studio-lumen-karlin",
+        decision: "favourite",
+        note: "Client prefers daylight."
+      },
+      {
+        studioSlug: "atelier-rosa-vinohrady",
+        decision: "backup"
+      }
+    ]);
+
+    const loaded = await server.inject({
+      method: "GET",
+      url: "/shortlists/shortlist-1"
+    });
+
+    expect(loaded.json().shortlist.items[0].note).toBe("Client prefers daylight.");
+  });
 });

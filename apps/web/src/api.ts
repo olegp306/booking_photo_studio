@@ -205,3 +205,38 @@ export const loadSharedShortlist = async (shortlistId: string): Promise<SharedSh
     return shortlist;
   }
 };
+
+export const updateSharedShortlist = async (
+  shortlistId: string,
+  items: SharedShortlistItem[]
+): Promise<SharedShortlist> => {
+  const localShortlist = localShortlists.get(shortlistId);
+  if (localShortlist) {
+    localShortlists.set(shortlistId, {
+      ...localShortlist,
+      items: localShortlist.studioSlugs.map((studioSlug) => ({
+        studioSlug,
+        ...items.find((item) => item.studioSlug === studioSlug)
+      }))
+    });
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/shortlists/${shortlistId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        items
+      })
+    });
+    if (!response.ok) throw new Error("Failed to update shortlist");
+    const payload = (await response.json()) as { shortlist: SharedShortlist };
+    return payload.shortlist;
+  } catch {
+    const shortlist = localShortlists.get(shortlistId);
+    if (!shortlist) throw new Error("Shortlist was not found");
+    return shortlist;
+  }
+};

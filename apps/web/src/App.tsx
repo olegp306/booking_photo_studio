@@ -45,7 +45,8 @@ import {
   loadSharedShortlist,
   loadStudios,
   submitBookingRequest,
-  updateOwnerListing
+  updateOwnerListing,
+  updateSharedShortlist
 } from "./api";
 
 const money = (amount: number, currency: string) =>
@@ -120,6 +121,7 @@ export const App = () => {
   const [lastGuestEmail, setLastGuestEmail] = useState<string | undefined>();
   const [hashVersion, setHashVersion] = useState(0);
   const [shortlistItems, setShortlistItems] = useState<Record<string, SharedShortlistItem>>({});
+  const [activeShortlistId, setActiveShortlistId] = useState<string | undefined>();
 
   const filters: StudioSearchFilters = useMemo(
     () => ({
@@ -157,6 +159,7 @@ export const App = () => {
 
     setSaved(new Set(sharedSavedSlugs));
     setShortlistItems({});
+    setActiveShortlistId(undefined);
     setSelectedStudio(undefined);
     setView("saved");
   }, [hashVersion]);
@@ -167,6 +170,7 @@ export const App = () => {
 
     loadSharedShortlist(sharedShortlistId).then((shortlist) => {
       setSaved(new Set(shortlist.studioSlugs));
+      setActiveShortlistId(shortlist.id);
       setShortlistItems(
         Object.fromEntries(shortlist.items.map((item) => [item.studioSlug, item])) as Record<string, SharedShortlistItem>
       );
@@ -174,6 +178,21 @@ export const App = () => {
       setView("saved");
     });
   }, [hashVersion]);
+
+  const updateShortlistItem = (item: SharedShortlistItem) => {
+    const nextItems = {
+      ...shortlistItems,
+      [item.studioSlug]: item
+    };
+    setShortlistItems(nextItems);
+
+    if (activeShortlistId) {
+      updateSharedShortlist(
+        activeShortlistId,
+        Array.from(saved).map((studioSlug) => nextItems[studioSlug] ?? { studioSlug })
+      ).catch(() => undefined);
+    }
+  };
 
   useEffect(() => {
     if (view === "host") {
@@ -253,18 +272,23 @@ export const App = () => {
       <SavedStudios
         savedCount={saved.size}
         savedStudios={savedStudios}
+        sharedShortlistId={activeShortlistId}
         shortlistItems={shortlistItems}
         onBackToExplore={() => setView("explore")}
-        onChangeShortlistItem={(item) =>
-          setShortlistItems((current) => ({
-            ...current,
-            [item.studioSlug]: item
-          }))
-        }
+        onChangeShortlistItem={updateShortlistItem}
         onOpenBookings={() => setView("bookings")}
         onOpenHost={() => setView("host")}
         onOpenStudio={openStudio}
         onSave={toggleSaved}
+        onShortlistCreated={(shortlist) => {
+          setActiveShortlistId(shortlist.id);
+          setShortlistItems(
+            Object.fromEntries(shortlist.items.map((item) => [item.studioSlug, item])) as Record<
+              string,
+              SharedShortlistItem
+            >
+          );
+        }}
       />
     );
   }
@@ -760,6 +784,7 @@ const CustomerBookings = ({ bookings, onBackToExplore, onOpenSaved, onOpenHost }
 interface SavedStudiosProps {
   savedCount: number;
   savedStudios: Studio[];
+  sharedShortlistId?: string;
   shortlistItems: Record<string, SharedShortlistItem>;
   onBackToExplore: () => void;
   onChangeShortlistItem: (item: SharedShortlistItem) => void;
@@ -767,21 +792,23 @@ interface SavedStudiosProps {
   onOpenHost: () => void;
   onOpenStudio: (studio: Studio) => void;
   onSave: (slug: string) => void;
+  onShortlistCreated: (shortlist: { id: string; items: SharedShortlistItem[] }) => void;
 }
 
 const SavedStudios = ({
   savedCount,
   savedStudios,
+  sharedShortlistId,
   shortlistItems,
   onBackToExplore,
   onChangeShortlistItem,
   onOpenBookings,
   onOpenHost,
   onOpenStudio,
-  onSave
+  onSave,
+  onShortlistCreated
 }: SavedStudiosProps) => {
   const [shareOpen, setShareOpen] = useState(false);
-  const [sharedShortlistId, setSharedShortlistId] = useState<string | undefined>();
   const [shareStatus, setShareStatus] = useState<"idle" | "creating">("idle");
   const shareUrl = sharedShortlistId
     ? `${window.location.origin}/#shortlist/${sharedShortlistId}`
@@ -803,7 +830,7 @@ const SavedStudios = ({
       savedStudios.map((studio) => studio.slug),
       savedStudios.map((studio) => shortlistItems[studio.slug] ?? { studioSlug: studio.slug })
     );
-    setSharedShortlistId(shortlist.id);
+    onShortlistCreated(shortlist);
     setShareStatus("idle");
   };
   const updateDecision = (studio: Studio, decision: ShortlistDecision) => {

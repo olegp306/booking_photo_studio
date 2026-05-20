@@ -303,5 +303,43 @@ export const buildServer = () => {
     };
   });
 
+  app.patch<{
+    Params: { shortlistId: string };
+    Body: {
+      items: SharedShortlistItem[];
+    };
+  }>("/shortlists/:shortlistId", async (request, reply) => {
+    const shortlistIndex = shortlists.findIndex((item) => item.id === request.params.shortlistId);
+
+    if (shortlistIndex === -1) {
+      return reply.code(404).send({
+        error: "SHORTLIST_NOT_FOUND",
+        message: "Shortlist was not found"
+      });
+    }
+
+    const shortlist = shortlists[shortlistIndex];
+    const invalidItem = request.body.items.find((item) => !shortlist.studioSlugs.includes(item.studioSlug));
+    if (invalidItem) {
+      return reply.code(400).send({
+        error: "INVALID_SHORTLIST",
+        message: `Studio ${invalidItem.studioSlug} is not part of this shortlist`
+      });
+    }
+
+    const updated: SharedShortlist = {
+      ...shortlist,
+      items: shortlist.studioSlugs.map((studioSlug) => ({
+        studioSlug,
+        ...request.body.items.find((item) => item.studioSlug === studioSlug)
+      }))
+    };
+    shortlists[shortlistIndex] = updated;
+
+    return {
+      shortlist: updated
+    };
+  });
+
   return app;
 };

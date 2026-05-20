@@ -216,6 +216,30 @@ describe("App", () => {
     expect(screen.getByText("Atelier Rosa Vinohrady")).toBeInTheDocument();
   });
 
+  it("keeps collaborator decisions and notes on a persisted shortlist link", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+
+    await screen.findByText("Studio Lumen Karlin");
+    const saveButtons = screen.getAllByRole("button", { name: "Save studio" });
+    await user.click(saveButtons[0]);
+    await user.click(saveButtons[1]);
+    await user.click(screen.getByRole("link", { name: "Saved" }));
+    await user.click(await screen.findByRole("button", { name: "Share saved shortlist" }));
+    const sharedLink = (await screen.findByLabelText("Shortlist link")) as HTMLInputElement;
+
+    await user.click(screen.getByRole("button", { name: "Mark Studio Lumen Karlin as favourite" }));
+    await user.type(screen.getByLabelText("Note for Studio Lumen Karlin"), "Client likes the daylight set.");
+    unmount();
+
+    window.location.hash = new URL(sharedLink.value).hash;
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Saved studios" })).toBeInTheDocument();
+    expect(await screen.findByText("Status: Favourite")).toBeInTheDocument();
+    expect(screen.getAllByText("Client likes the daylight set.")).toHaveLength(2);
+  });
+
   it("lets collaborators mark shortlist decisions and leave notes", async () => {
     const user = userEvent.setup();
     window.location.hash = "#saved/studio-lumen-karlin,atelier-rosa-vinohrady";
