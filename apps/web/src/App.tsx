@@ -45,6 +45,7 @@ import {
   decideOwnerBooking,
   loadAvailability,
   loadCustomerBookings,
+  loadOwnerAvailabilityBlocks,
   loadOwnerBookings,
   loadSharedShortlist,
   loadStudios,
@@ -1158,6 +1159,7 @@ const OwnerDashboard = ({
         <OwnerCalendar
           studio={studio}
           onBlockAvailability={onBlockAvailability}
+          onLoadAvailabilityBlocks={loadOwnerAvailabilityBlocks}
           onReleaseAvailability={onReleaseAvailability}
         />
       ) : studio ? (
@@ -1262,10 +1264,16 @@ const OwnerRequests = ({ bookings, onCompleteBooking, onDecideBooking }: OwnerRe
 interface OwnerCalendarProps {
   studio: Studio;
   onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
+  onLoadAvailabilityBlocks: (studioSlug?: string) => Promise<OwnerAvailabilityBlock[]>;
   onReleaseAvailability: (blockId: string) => Promise<void>;
 }
 
-const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: OwnerCalendarProps) => {
+const OwnerCalendar = ({
+  studio,
+  onBlockAvailability,
+  onLoadAvailabilityBlocks,
+  onReleaseAvailability
+}: OwnerCalendarProps) => {
   const [roomId, setRoomId] = useState(studio.rooms[0]?.id ?? "");
   const [date, setDate] = useState("2026-06-12");
   const [startTime, setStartTime] = useState("09:00");
@@ -1274,6 +1282,8 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
   const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [reason, setReason] = useState("");
   const [blocks, setBlocks] = useState<OwnerAvailabilityBlock[]>([]);
+  const [agendaRoom, setAgendaRoom] = useState("all");
+  const [agendaAction, setAgendaAction] = useState<"all" | "hold" | "open">("all");
   const selectedRoom = studio.rooms.find((room) => room.id === roomId) ?? studio.rooms[0];
   const holdCount = blocks.filter((block) => (block.kind ?? "hold") === "hold").length;
   const openOverrideCount = blocks.filter((block) => block.kind === "open").length;
@@ -1281,10 +1291,20 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
   const nextCalendarDate = blocks
     .map((block) => block.date)
     .sort((firstDate, secondDate) => firstDate.localeCompare(secondDate))[0];
+  const visibleAgendaBlocks = useMemo(
+    () =>
+      blocks.filter((block) => {
+        const matchesRoom = agendaRoom === "all" || block.roomId === agendaRoom;
+        const blockAction = block.kind === "open" ? "open" : "hold";
+        const matchesAction = agendaAction === "all" || blockAction === agendaAction;
+        return matchesRoom && matchesAction;
+      }),
+    [agendaAction, agendaRoom, blocks]
+  );
   const agendaGroups = useMemo(
     () =>
       Array.from(
-        blocks
+        visibleAgendaBlocks
           .slice()
           .sort((firstBlock, secondBlock) =>
             `${firstBlock.date}-${firstBlock.startTime}`.localeCompare(`${secondBlock.date}-${secondBlock.startTime}`)
@@ -1296,8 +1316,12 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
             return groups;
           }, new Map<string, OwnerAvailabilityBlock[]>())
       ),
-    [blocks]
+    [visibleAgendaBlocks]
   );
+
+  useEffect(() => {
+    onLoadAvailabilityBlocks(studio.slug).then(setBlocks);
+  }, [onLoadAvailabilityBlocks, studio.slug]);
 
   const blockSlot = async (event: FormEvent) => {
     event.preventDefault();
@@ -1440,6 +1464,30 @@ const OwnerCalendar = ({ studio, onBlockAvailability, onReleaseAvailability }: O
         <div>
           <p className="eyebrow">By day</p>
           <h2>Calendar agenda</h2>
+        </div>
+        <div className="calendar-agenda-filters">
+          <label>
+            Agenda room
+            <select value={agendaRoom} onChange={(event) => setAgendaRoom(event.target.value)}>
+              <option value="all">All rooms</option>
+              {studio.rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Agenda action
+            <select
+              value={agendaAction}
+              onChange={(event) => setAgendaAction(event.target.value as "all" | "hold" | "open")}
+            >
+              <option value="all">All actions</option>
+              <option value="hold">Holds only</option>
+              <option value="open">Open overrides</option>
+            </select>
+          </label>
         </div>
         {agendaGroups.length === 0 ? (
           <p className="empty-state">No calendar changes yet.</p>

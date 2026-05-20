@@ -2,10 +2,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { resetLocalApiStateForTests } from "./api";
 
 describe("App", () => {
   beforeEach(() => {
     window.location.hash = "";
+    resetLocalApiStateForTests();
   });
 
   it("opens saved view directly with an empty state", async () => {
@@ -262,10 +264,10 @@ describe("App", () => {
     await user.click(saveButtons[1]);
     await user.click(screen.getByRole("link", { name: "Saved" }));
     await user.click(await screen.findByRole("button", { name: "Share saved shortlist" }));
-    await screen.findByDisplayValue("http://localhost:3000/#shortlist/shortlist-2");
+    const sharedLink = (await screen.findByLabelText("Shortlist link")) as HTMLInputElement;
     unmount();
 
-    window.location.hash = "#shortlist/shortlist-2";
+    window.location.hash = new URL(sharedLink.value).hash;
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Saved studios" })).toBeInTheDocument();
@@ -444,6 +446,43 @@ describe("App", () => {
 
     expect(await screen.findByText("2026-06-19 - 1 change")).toBeInTheDocument();
     expect(screen.getAllByText("Main Daylight Room - 11:00 - Hold")).toHaveLength(2);
+  });
+
+  it("restores owner calendar changes after leaving the calendar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.type(screen.getByLabelText("Block reason"), "Loaded later");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+    await screen.findByText("09:00 Main Daylight Room blocked.");
+
+    await user.click(screen.getByRole("button", { name: "Back to explore" }));
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+
+    expect(await screen.findByText("09:00 Main Daylight Room blocked.")).toBeInTheDocument();
+    expect(screen.getByText("Loaded later")).toBeInTheDocument();
+  });
+
+  it("filters owner calendar agenda by room and action", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+    await user.selectOptions(screen.getByLabelText("Calendar action"), "open");
+    await user.selectOptions(screen.getByLabelText("Room"), "lumen-product");
+    await user.selectOptions(screen.getByLabelText("Start time"), "15:00");
+    await user.click(screen.getByRole("button", { name: "Block selected slot" }));
+
+    await user.selectOptions(screen.getByLabelText("Agenda room"), "lumen-product");
+    await user.selectOptions(screen.getByLabelText("Agenda action"), "open");
+
+    expect(screen.getByText("Product Corner - 15:00 - Open")).toBeInTheDocument();
+    expect(screen.queryByText("Main Daylight Room - 09:00 - Hold")).not.toBeInTheDocument();
   });
 
   it("creates an AI listing draft from owner notes", async () => {

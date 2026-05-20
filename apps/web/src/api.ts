@@ -270,6 +270,22 @@ export const createOwnerAvailabilityBlock = async (
   }
 };
 
+export const loadOwnerAvailabilityBlocks = async (studioSlug?: string): Promise<OwnerAvailabilityBlock[]> => {
+  const params = new URLSearchParams();
+  if (studioSlug) params.set("studioSlug", studioSlug);
+
+  try {
+    const response = await fetch(`${API_BASE}/owner/availability-blocks?${params.toString()}`);
+    if (!response.ok) throw new Error("Failed to load availability blocks");
+    const payload = (await response.json()) as { blocks: OwnerAvailabilityBlock[] };
+    return payload.blocks;
+  } catch {
+    return studioSlug
+      ? localAvailabilityBlocks.filter((block) => block.studioSlug === studioSlug)
+      : localAvailabilityBlocks;
+  }
+};
+
 export const releaseOwnerAvailabilityBlock = async (blockId: string): Promise<void> => {
   const localBlockIndex = localAvailabilityBlocks.findIndex((block) => block.id === blockId);
   if (localBlockIndex !== -1) {
@@ -284,6 +300,13 @@ export const releaseOwnerAvailabilityBlock = async (blockId: string): Promise<vo
   } catch (error) {
     if (localBlockIndex === -1) throw error;
   }
+};
+
+export const resetLocalApiStateForTests = () => {
+  localShortlists.clear();
+  localAvailabilityBlocks.splice(0, localAvailabilityBlocks.length);
+  localShortlistCount = 0;
+  localAvailabilityBlockCount = 0;
 };
 
 export const createSharedShortlist = async (

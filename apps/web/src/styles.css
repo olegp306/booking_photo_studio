@@ -898,6 +898,32 @@ h2 {
   padding: 12px;
 }
 
+.calendar-agenda-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.calendar-agenda-filters label {
+  display: grid;
+  gap: 6px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.calendar-agenda-filters select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #dccfc0;
+  border-radius: 8px;
+  background: #fff;
+  color: #191714;
+  font: inherit;
+  font-weight: 700;
+  padding: 10px;
+}
+
 .calendar-agenda-day h3 {
   font-size: 14px;
 }

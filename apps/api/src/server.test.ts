@@ -200,6 +200,38 @@ describe("studio API", () => {
     );
   });
 
+  it("returns owner availability blocks for a studio", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/owner/availability-blocks",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00",
+        reason: "Maintenance"
+      }
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/owner/availability-blocks?studioSlug=studio-lumen-karlin"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().blocks).toEqual([
+      expect.objectContaining({
+        id: "block-1",
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        startTime: "09:00",
+        kind: "hold",
+        reason: "Maintenance"
+      })
+    ]);
+  });
+
   it("lets owners release a blocked availability slot", async () => {
     const server = buildServer();
     await server.inject({

@@ -16,6 +16,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Owner calendar full-day room closures and weekly recurring holds.
 - Owner calendar availability overrides and summary counts for quick owner review.
 - Owner calendar agenda grouped by day with next-week duplication for recurring changes.
+- Owner calendar session persistence with agenda filters by room and action.
 - Owner inbox for approving and declining booking requests.
 - Customer bookings view with payment capture status that confirms approved bookings.
 - Owner booking completion action after a confirmed shoot.
@@ -43,7 +44,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 4. Expand the owner listing editor for rooms, equipment, props, rules, pricing, and image upload.
 5. Connect the AI listing assistant to voice input and OpenAI so owners can generate structured listings from spoken notes.
 6. Add AI media helper flows to classify uploaded images as hero, room, example, equipment, or props.
-7. Expand owner calendar management with drag-friendly editing and persisted calendar state.
+7. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
 8. Add authentication and durable database storage for shared shortlists, comments, and decisions.
 9. Add post-booking lifecycle: messages, richer review display, and receipts.
 10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

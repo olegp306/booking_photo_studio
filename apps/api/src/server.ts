@@ -148,6 +148,14 @@ export const buildServer = () => {
     };
   });
 
+  app.get<{
+    Querystring: { studioSlug?: string };
+  }>("/owner/availability-blocks", async (request) => ({
+    blocks: request.query.studioSlug
+      ? availabilityBlocks.filter((block) => block.studioSlug === request.query.studioSlug)
+      : availabilityBlocks
+  }));
+
   app.post<{
     Body: Omit<OwnerAvailabilityBlock, "id">;
   }>("/owner/availability-blocks", async (request, reply) => {
