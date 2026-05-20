@@ -56,7 +56,7 @@ export interface StudioImage {
   id: string;
   url: string;
   alt: string;
-  kind: "hero" | "room" | "example";
+  kind: "hero" | "room" | "example" | "equipment";
 }
 
 export interface StudioRoom {
@@ -182,4 +182,5 @@ export interface OwnerListingUpdate {
   equipmentIds?: EquipmentId[];
   amenityIds?: AmenityId[];
   rules?: string[];
+  images?: StudioImage[];
 }

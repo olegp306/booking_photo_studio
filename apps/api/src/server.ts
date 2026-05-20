@@ -231,7 +231,8 @@ export const buildServer = () => {
       featureIds: request.body.featureIds ?? current.featureIds,
       equipmentIds: request.body.equipmentIds ?? current.equipmentIds,
       amenityIds: request.body.amenityIds ?? current.amenityIds,
-      rules: request.body.rules ?? current.rules
+      rules: request.body.rules ?? current.rules,
+      images: request.body.images ?? current.images
     };
     studios[studioIndex] = updated;
 

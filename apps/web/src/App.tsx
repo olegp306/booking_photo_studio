@@ -31,6 +31,7 @@ import {
   type OwnerListingUpdate,
   type ShootType,
   type Studio,
+  type StudioImage,
   type StudioSearchFilters
 } from "@studio-market/shared";
 import {
@@ -61,6 +62,12 @@ const shootTypeOptions = Object.entries(shootTypeLabels) as Array<[ShootType, st
 const featureOptions = Object.entries(featureLabels) as Array<[FeatureId, string]>;
 const equipmentOptions = Object.entries(equipmentLabels) as Array<[EquipmentId, string]>;
 const amenityOptions = Object.entries(amenityLabels) as Array<[AmenityId, string]>;
+const mediaKindLabels: Record<StudioImage["kind"], string> = {
+  hero: "Hero",
+  room: "Rooms",
+  example: "Example shoots",
+  equipment: "Equipment and props"
+};
 type AppView = "explore" | "saved" | "bookings" | "host";
 
 const initialViewFromHash = (): AppView => {
@@ -872,6 +879,10 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [featureIds, setFeatureIds] = useState<FeatureId[]>(studio.featureIds);
   const [equipmentIds, setEquipmentIds] = useState<EquipmentId[]>(studio.equipmentIds);
   const [amenityIds, setAmenityIds] = useState<AmenityId[]>(studio.amenityIds);
+  const [images, setImages] = useState<StudioImage[]>(studio.images);
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [mediaKind, setMediaKind] = useState<StudioImage["kind"]>("room");
   const [rules, setRules] = useState(studio.rules.join("\n"));
   const [saved, setSaved] = useState(false);
 
@@ -884,6 +895,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setFeatureIds(studio.featureIds);
     setEquipmentIds(studio.equipmentIds);
     setAmenityIds(studio.amenityIds);
+    setImages(studio.images);
     setRules(studio.rules.join("\n"));
   }, [studio]);
 
@@ -922,6 +934,25 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     );
   };
 
+  const addMedia = () => {
+    const trimmedUrl = mediaUrl.trim();
+    const trimmedCaption = mediaCaption.trim();
+    if (!trimmedUrl || !trimmedCaption) return;
+
+    setImages((current) => [
+      ...current,
+      {
+        id: `owner-media-${Date.now()}`,
+        url: trimmedUrl,
+        alt: trimmedCaption,
+        kind: mediaKind
+      }
+    ]);
+    setMediaUrl("");
+    setMediaCaption("");
+    setMediaKind("room");
+  };
+
   const submitListing = async (event: FormEvent) => {
     event.preventDefault();
     const updatedRules = rules
@@ -938,6 +969,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       featureIds,
       equipmentIds,
       amenityIds,
+      images,
       rules: updatedRules
     });
     setSaved(true);
@@ -1092,6 +1124,51 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
                 );
               })}
             </div>
+          </div>
+        </section>
+        <section className="media-editor" aria-label="Studio media library">
+          <h2>Studio media</h2>
+          <div className="media-grid">
+            {images.map((image) => (
+              <article className="media-card" key={image.id}>
+                <img src={image.url} alt={image.alt} />
+                <div>
+                  <span>{mediaKindLabels[image.kind]}</span>
+                  <p>{image.alt}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="media-form">
+            <label>
+              Media URL
+              <input
+                value={mediaUrl}
+                onChange={(event) => setMediaUrl(event.target.value)}
+                placeholder="https://..."
+                type="url"
+              />
+            </label>
+            <label>
+              Media caption
+              <input
+                value={mediaCaption}
+                onChange={(event) => setMediaCaption(event.target.value)}
+                placeholder="Describe what clients see"
+              />
+            </label>
+            <label>
+              Media category
+              <select value={mediaKind} onChange={(event) => setMediaKind(event.target.value as StudioImage["kind"])}>
+                <option value="hero">Hero</option>
+                <option value="room">Rooms</option>
+                <option value="example">Example shoots</option>
+                <option value="equipment">Equipment and props</option>
+              </select>
+            </label>
+            <button className="secondary-button" onClick={addMedia} type="button">
+              Add media
+            </button>
           </div>
         </section>
         <label>

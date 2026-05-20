@@ -147,7 +147,8 @@ export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUp
       featureIds: updates.featureIds ?? studio.featureIds,
       equipmentIds: updates.equipmentIds ?? studio.equipmentIds,
       amenityIds: updates.amenityIds ?? studio.amenityIds,
-      rules: updates.rules ?? studio.rules
+      rules: updates.rules ?? studio.rules,
+      images: updates.images ?? studio.images
     };
   }
 };

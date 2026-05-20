@@ -190,4 +190,26 @@ describe("App", () => {
     expect(screen.getAllByText("Video").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Projector").length).toBeGreaterThan(0);
   });
+
+  it("lets owners add studio media by URL and category", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.type(screen.getByLabelText("Media URL"), "https://example.com/studio-corner.jpg");
+    await user.type(screen.getByLabelText("Media caption"), "Styled product corner with paper backdrop");
+    await user.selectOptions(screen.getByLabelText("Media category"), "equipment");
+    await user.click(screen.getByRole("button", { name: "Add media" }));
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    const mediaLibrary = within(screen.getByLabelText("Studio media library"));
+    expect(mediaLibrary.getAllByText("Equipment and props").length).toBeGreaterThan(0);
+    expect(mediaLibrary.getByText("Styled product corner with paper backdrop")).toBeInTheDocument();
+    expect(mediaLibrary.getByAltText("Styled product corner with paper backdrop")).toHaveAttribute(
+      "src",
+      "https://example.com/studio-corner.jpg"
+    );
+  });
 });
