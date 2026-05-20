@@ -576,6 +576,80 @@ h2 {
   padding-top: 18px;
 }
 
+.shortlist-card {
+  display: grid;
+  gap: 10px;
+}
+
+.shortlist-collaboration {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.decision-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.decision-button {
+  min-width: 0;
+  padding: 8px 7px;
+  border: 1px solid #eadfd2;
+  border-radius: 999px;
+  background: #fffaf4;
+  color: #312b26;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.decision-active {
+  border-color: #191714;
+  background: #191714;
+  color: #fff;
+}
+
+.decision-summary {
+  margin: 0;
+  color: #245a2f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.shortlist-collaboration label {
+  display: grid;
+  gap: 6px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.shortlist-collaboration textarea {
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid #dccfc0;
+  border-radius: 8px;
+  background: #fffaf4;
+  color: #191714;
+  font: inherit;
+  font-weight: 500;
+  resize: vertical;
+}
+
+.shortlist-note {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 3px solid #eadfd2;
+  color: #6e6259;
+  line-height: 1.4;
+}
+
 .shortlist-share {
   display: grid;
   gap: 12px;

@@ -197,6 +197,24 @@ describe("App", () => {
     expect(screen.getByText("Compare 2 Prague studios: Studio Lumen Karlin, Atelier Rosa Vinohrady.")).toBeInTheDocument();
   });
 
+  it("lets collaborators mark shortlist decisions and leave notes", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#saved/studio-lumen-karlin,atelier-rosa-vinohrady";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Saved studios" });
+    await user.click(screen.getByRole("button", { name: "Mark Studio Lumen Karlin as favourite" }));
+    await user.click(screen.getByRole("button", { name: "Mark Atelier Rosa Vinohrady as backup" }));
+    await user.type(
+      screen.getByLabelText("Note for Studio Lumen Karlin"),
+      "Best daylight and cyclorama for the hero shots."
+    );
+
+    expect(screen.getByText("Status: Favourite")).toBeInTheDocument();
+    expect(screen.getByText("Status: Backup")).toBeInTheDocument();
+    expect(screen.getAllByText("Best daylight and cyclorama for the hero shots.")).toHaveLength(2);
+  });
+
   it("lets studio owners preview and edit their listing", async () => {
     const user = userEvent.setup();
     render(<App />);
