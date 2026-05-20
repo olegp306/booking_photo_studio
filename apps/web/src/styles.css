@@ -1157,6 +1157,12 @@ h2 {
   resize: vertical;
 }
 
+.room-attribute-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
 .listing-operations {
   display: grid;
   gap: 12px;

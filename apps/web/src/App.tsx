@@ -1655,7 +1655,12 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     );
   };
 
-  const updateRoom = (roomId: string, updates: Partial<Pick<StudioRoom, "summary" | "pricePerHour" | "bookingMode">>) => {
+  const updateRoom = (
+    roomId: string,
+    updates: Partial<
+      Pick<StudioRoom, "summary" | "pricePerHour" | "bookingMode" | "areaSqm" | "ceilingHeightM" | "capacity">
+    >
+  ) => {
     setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, ...updates } : room)));
   };
 
@@ -1895,7 +1900,9 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
             {rooms.map((room) => (
               <article className="room-editor-card" key={room.id}>
                 <div>
-                  <p className="eyebrow">{room.areaSqm} sqm - {room.ceilingHeightM} m ceiling</p>
+                  <p className="eyebrow">
+                    {room.areaSqm} sqm - {room.ceilingHeightM} m ceiling - up to {room.capacity}
+                  </p>
                   <h3>{room.name}</h3>
                   <strong>{money(room.pricePerHour, studio.currency)} / hour</strong>
                 </div>
@@ -1917,6 +1924,39 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
                     required
                   />
                 </label>
+                <div className="room-attribute-grid">
+                  <label>
+                    {room.name} area
+                    <input
+                      min="1"
+                      type="number"
+                      value={room.areaSqm}
+                      onChange={(event) => updateRoom(room.id, { areaSqm: Number(event.target.value) })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    {room.name} ceiling height
+                    <input
+                      min="1"
+                      step="0.1"
+                      type="number"
+                      value={room.ceilingHeightM}
+                      onChange={(event) => updateRoom(room.id, { ceilingHeightM: Number(event.target.value) })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    {room.name} capacity
+                    <input
+                      min="1"
+                      type="number"
+                      value={room.capacity}
+                      onChange={(event) => updateRoom(room.id, { capacity: Number(event.target.value) })}
+                      required
+                    />
+                  </label>
+                </div>
                 <label>
                   {room.name} booking mode
                   <select

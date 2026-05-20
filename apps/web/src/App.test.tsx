@@ -346,11 +346,18 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Main Daylight Room summary"), "Updated daylight room for portraits");
     await user.clear(screen.getByLabelText("Main Daylight Room hourly price"));
     await user.type(screen.getByLabelText("Main Daylight Room hourly price"), "1550");
+    await user.clear(screen.getByLabelText("Main Daylight Room area"));
+    await user.type(screen.getByLabelText("Main Daylight Room area"), "104");
+    await user.clear(screen.getByLabelText("Main Daylight Room ceiling height"));
+    await user.type(screen.getByLabelText("Main Daylight Room ceiling height"), "4.4");
+    await user.clear(screen.getByLabelText("Main Daylight Room capacity"));
+    await user.type(screen.getByLabelText("Main Daylight Room capacity"), "12");
     await user.click(screen.getByRole("button", { name: "Save listing changes" }));
 
     expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
     expect(screen.getByText("Updated daylight room for portraits")).toBeInTheDocument();
     expect(screen.getByText("CZK 1,550 / hour")).toBeInTheDocument();
+    expect(screen.getByText("104 sqm - 4.4 m ceiling - up to 12")).toBeInTheDocument();
   });
 
   it("lets owners update props, access notes, and cancellation policy", async () => {
