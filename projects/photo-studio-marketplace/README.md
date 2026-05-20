@@ -1,0 +1,34 @@
+# Photo Studio Marketplace
+
+Mobile-first marketplace for discovering, saving, booking, and managing photo studio rentals in European cities.
+
+The first product shape is intentionally close to familiar Airbnb marketplace patterns, but the visual and search emphasis is on interiors, shooting examples, light, equipment, props, rooms, and studio availability.
+
+## Current Build
+
+- React/Vite mobile web app.
+- Node.js/Fastify TypeScript API.
+- Shared TypeScript domain package.
+- Prague seed catalog with studios, rooms, equipment, props, and photo examples.
+- Explore feed with filters and studio detail views.
+- Availability slots and request-to-book flow.
+- Owner inbox for approving and declining booking requests.
+- Customer bookings view with payment CTA placeholder.
+- Saved studios shortlist for comparing and sharing candidates.
+
+## Project Docs
+
+- [Product spec](./specs/2026-05-19-photo-studio-marketplace-design.md)
+- [Marketplace foundation plan](./plans/2026-05-19-marketplace-foundation.md)
+- [Availability and booking plan](./plans/2026-05-19-availability-booking.md)
+
+## Next Roadmap
+
+1. Replace in-memory booking state with persistent storage.
+2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
+3. Integrate real payments with Stripe Checkout and a future owner payout model.
+4. Build the owner listing editor for rooms, equipment, props, images, rules, and pricing.
+5. Add owner calendar management, blocked time, and availability overrides.
+6. Add shareable studio pages and saved-list sharing between clients and photographers.
+7. Add post-booking lifecycle: messages, confirmations, reviews, and receipts.
+8. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.
