@@ -18,6 +18,8 @@ import {
   type BookingIntentRequest,
   type EquipmentId,
   type FeatureId,
+  type ListingReviewDecision,
+  type ListingReviewItem,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
   type OwnerAvailabilityBlock,
@@ -206,6 +208,24 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       ...metrics.filter((metric) => metric.path !== path)
     ]);
   };
+  const currentSession = async () => (await sessionStore.list())[0] ?? defaultSession;
+  const requireAdmin = async (reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }) => {
+    const session = await currentSession();
+    if (session.role === "admin") return false;
+
+    return reply.code(403).send({
+      error: "ADMIN_ROLE_REQUIRED",
+      message: "Admin role is required for listing moderation"
+    });
+  };
+  const toListingReviewItem = (studio: Studio): ListingReviewItem => ({
+    studioSlug: studio.slug,
+    studioName: studio.name,
+    ownerName: studio.ownerName,
+    district: studio.district,
+    tagline: studio.tagline,
+    listingStatus: studio.listingStatus
+  });
 
   app.register(cors, {
     origin: true
@@ -903,6 +923,50 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       accessNotes: request.body.accessNotes ?? current.accessNotes,
       cancellationPolicy: request.body.cancellationPolicy ?? current.cancellationPolicy,
       listingStatus: request.body.listingStatus ?? current.listingStatus
+    };
+    studios[studioIndex] = updated;
+
+    return {
+      studio: updated
+    };
+  });
+
+  app.get("/admin/listing-reviews", async (_request, reply) => {
+    const forbidden = await requireAdmin(reply);
+    if (forbidden) return forbidden;
+
+    return {
+      reviews: studios
+        .filter((studio) => studio.listingStatus === "in_review")
+        .map(toListingReviewItem)
+    };
+  });
+
+  app.patch<{
+    Params: { slug: string };
+    Body: { decision?: ListingReviewDecision };
+  }>("/admin/studios/:slug/review", async (request, reply) => {
+    const forbidden = await requireAdmin(reply);
+    if (forbidden) return forbidden;
+
+    if (request.body.decision !== "approve" && request.body.decision !== "reject") {
+      return reply.code(400).send({
+        error: "INVALID_LISTING_REVIEW_DECISION",
+        message: "Review decision must be approve or reject"
+      });
+    }
+
+    const studioIndex = studios.findIndex((studio) => studio.slug === request.params.slug);
+    if (studioIndex === -1) {
+      return reply.code(404).send({
+        error: "STUDIO_NOT_FOUND",
+        message: "Studio was not found"
+      });
+    }
+
+    const updated = {
+      ...studios[studioIndex],
+      listingStatus: request.body.decision === "approve" ? "published" as const : "draft" as const
     };
     studios[studioIndex] = updated;
 

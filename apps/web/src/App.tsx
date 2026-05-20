@@ -45,8 +45,10 @@ import {
   createOwnerAvailabilityBlock,
   createSharedShortlist,
   createSupportTicket,
+  decideListingReview,
   decideOwnerBooking,
   generateListingDraft,
+  loadListingReviews,
   loadSession,
   loadAvailability,
   loadCustomerBookings,
@@ -69,6 +71,8 @@ import {
   updateSessionRole,
   updateSharedShortlist,
   type ImportedListingDraft,
+  type ListingReviewDecision,
+  type ListingReviewItem,
   type MediaSuggestionResult,
   type LaunchReadiness,
   type ReferralSource,
@@ -1793,6 +1797,8 @@ const SupportInbox = () => {
 const OwnerLaunchReadiness = () => {
   const [readiness, setReadiness] = useState<LaunchReadiness>();
   const [referralSummary, setReferralSummary] = useState<ReferralSummary>();
+  const [listingReviews, setListingReviews] = useState<ListingReviewItem[]>([]);
+  const [reviewStatus, setReviewStatus] = useState("");
   const [webhookStatus, setWebhookStatus] = useState<{
     state: "idle" | "loading" | "ready" | "error";
     message?: string;
@@ -1804,6 +1810,7 @@ const OwnerLaunchReadiness = () => {
   useEffect(() => {
     loadLaunchReadiness().then(setReadiness);
     loadReferralSummary().then(setReferralSummary);
+    loadListingReviews().then(setListingReviews);
   }, []);
 
   const services = readiness
@@ -1906,9 +1913,55 @@ const OwnerLaunchReadiness = () => {
       </article>
 
       <OwnerReferralSummary summary={referralSummary} />
+      <OwnerListingReviewQueue
+        reviews={listingReviews}
+        status={reviewStatus}
+        onDecideReview={async (review, decision) => {
+          const result = await decideListingReview(review.studioSlug, decision);
+          setListingReviews((current) => current.filter((candidate) => candidate.studioSlug !== review.studioSlug));
+          setReviewStatus(
+            `${review.studioName} ${result.listingStatus === "published" ? "published" : "sent back to draft"}.`
+          );
+        }}
+      />
     </section>
   );
 };
+
+const OwnerListingReviewQueue = ({
+  onDecideReview,
+  reviews,
+  status
+}: {
+  onDecideReview: (review: ListingReviewItem, decision: ListingReviewDecision) => Promise<void>;
+  reviews: ListingReviewItem[];
+  status: string;
+}) => (
+  <article className="listing-status-panel listing-review-panel">
+    <div>
+      <p className="eyebrow">Admin review</p>
+      <h2>Listing review queue</h2>
+      <p>{reviews.length ? `${reviews.length} listings waiting for moderation.` : "No listings are waiting for review."}</p>
+    </div>
+    <div className="launch-next-steps">
+      {reviews.map((review) => (
+        <span key={review.studioSlug}>
+          <Check size={15} />
+          <strong>{review.studioName}</strong> {review.ownerName} - {review.district}
+          <button
+            className="inline-action"
+            onClick={() => onDecideReview(review, "approve")}
+            type="button"
+            aria-label={`Approve ${review.studioName} listing`}
+          >
+            Approve
+          </button>
+        </span>
+      ))}
+      {status && <span>{status}</span>}
+    </div>
+  </article>
+);
 
 const OwnerReferralSummary = ({ summary }: { summary?: ReferralSummary }) => {
   const sources = (Object.entries(summary?.bySource ?? {}) as Array<[ReferralSource, number]>)

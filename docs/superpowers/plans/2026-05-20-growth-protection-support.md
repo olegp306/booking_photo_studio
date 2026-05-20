@@ -857,7 +857,7 @@ Verify:
 - Submit.
 - See `Support request sent.`
 
-- [ ] **Step 3: Commit and push**
+- [x] **Step 3: Commit and push**
 
 Run:
 
@@ -951,3 +951,32 @@ Persist public endpoint access counts through `LOCAL_DATA_DIR` using the existin
 - [x] **Step 3: Document protection posture**
 
 Add public API telemetry to the README current build and local persistence notes.
+
+---
+
+### Task 10: Admin Listing Review Queue
+
+**Files:**
+- Modify: `packages/shared/src/types.ts`
+- Modify: `apps/api/src/server.test.ts`
+- Modify: `apps/api/src/server.ts`
+- Modify: `apps/web/src/App.test.tsx`
+- Modify: `apps/web/src/App.tsx`
+- Modify: `apps/web/src/api.ts`
+- Modify: `projects/photo-studio-marketplace/README.md`
+
+- [x] **Step 1: Add failing API tests for review queue and admin-only moderation**
+
+Verify that submitted listings appear in `/admin/listing-reviews`, non-admin sessions cannot moderate them, and admin sessions can approve them into `published`.
+
+- [x] **Step 2: Add failing web test for Host launch review queue**
+
+Verify that the Host launch view can show submitted listing reviews and approve a listing.
+
+- [x] **Step 3: Implement shared types, API endpoints, and web helpers/UI**
+
+Add `ListingReviewItem` and `ListingReviewDecision`, admin review endpoints, and a compact review queue panel in Launch readiness.
+
+- [x] **Step 4: Verify targeted tests**
+
+Run API and web tests for listing review moderation.

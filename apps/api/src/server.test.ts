@@ -1378,6 +1378,85 @@ describe("studio API", () => {
     );
   });
 
+  it("returns submitted listings in the admin review queue", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "PATCH",
+      url: "/owner/studios/studio-lumen-karlin",
+      payload: {
+        listingStatus: "in_review"
+      }
+    });
+    await server.inject({
+      method: "PATCH",
+      url: "/session",
+      payload: {
+        role: "admin",
+        displayName: "Marketplace Admin"
+      }
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/admin/listing-reviews"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().reviews).toEqual([
+      expect.objectContaining({
+        studioSlug: "studio-lumen-karlin",
+        studioName: "Studio Lumen Karlin",
+        ownerName: "Lumen Studios",
+        listingStatus: "in_review"
+      })
+    ]);
+  });
+
+  it("requires admin role to approve listing reviews", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "PATCH",
+      url: "/owner/studios/studio-lumen-karlin",
+      payload: {
+        listingStatus: "in_review"
+      }
+    });
+
+    const forbidden = await server.inject({
+      method: "PATCH",
+      url: "/admin/studios/studio-lumen-karlin/review",
+      payload: {
+        decision: "approve"
+      }
+    });
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json().error).toBe("ADMIN_ROLE_REQUIRED");
+
+    await server.inject({
+      method: "PATCH",
+      url: "/session",
+      payload: {
+        role: "admin",
+        displayName: "Marketplace Admin"
+      }
+    });
+    const approved = await server.inject({
+      method: "PATCH",
+      url: "/admin/studios/studio-lumen-karlin/review",
+      payload: {
+        decision: "approve"
+      }
+    });
+
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json().studio).toEqual(
+      expect.objectContaining({
+        slug: "studio-lumen-karlin",
+        listingStatus: "published"
+      })
+    );
+  });
+
   it("returns customer bookings by guest email", async () => {
     const server = buildServer();
     await server.inject({

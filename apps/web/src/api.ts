@@ -13,6 +13,8 @@ import {
   type BookingIntent,
   type BookingIntentRequest,
   type ListingDraft,
+  type ListingReviewDecision,
+  type ListingReviewItem,
   type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
   type OwnerBookingDecision,
@@ -37,7 +39,17 @@ import {
 const API_BASE = "/api";
 export type AiDraftMode = "local-fallback" | "openai";
 export type ImportedDraftMode = "local-fallback" | "openai";
-export type { ReferralSource, ReferralSummary, SupportCategory, SupportEvent, SupportTicket, UserRole, UserSession };
+export type {
+  ListingReviewDecision,
+  ListingReviewItem,
+  ReferralSource,
+  ReferralSummary,
+  SupportCategory,
+  SupportEvent,
+  SupportTicket,
+  UserRole,
+  UserSession
+};
 
 export interface LaunchServiceReadiness {
   configured: boolean;
@@ -388,6 +400,36 @@ export const setupTelegramWebhook = async (): Promise<TelegramWebhookSetupResult
   }
 
   return payload as TelegramWebhookSetupResult;
+};
+
+export const loadListingReviews = async (): Promise<ListingReviewItem[]> => {
+  try {
+    const response = await fetch(`${API_BASE}/admin/listing-reviews`);
+    if (!response.ok) throw new Error("Failed to load listing reviews");
+    const payload = (await response.json()) as { reviews: ListingReviewItem[] };
+    return payload.reviews;
+  } catch {
+    return [];
+  }
+};
+
+export const decideListingReview = async (
+  studioSlug: string,
+  decision: ListingReviewDecision
+): Promise<Pick<Studio, "slug" | "listingStatus">> => {
+  const response = await fetch(`${API_BASE}/admin/studios/${studioSlug}/review`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ decision })
+  });
+  if (!response.ok) throw new Error("Failed to update listing review");
+  const payload = (await response.json()) as { studio: Studio };
+  return {
+    slug: payload.studio.slug,
+    listingStatus: payload.studio.listingStatus
+  };
 };
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {

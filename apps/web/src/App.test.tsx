@@ -256,6 +256,55 @@ describe("App", () => {
     expect(screen.getByText("#telegram-drafts")).toBeInTheDocument();
   });
 
+  it("shows and approves submitted listings from the launch review queue", async () => {
+    const user = userEvent.setup();
+    const reviewRequests: Array<unknown> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/admin/listing-reviews")) {
+        return new Response(
+          JSON.stringify({
+            reviews: [
+              {
+                studioSlug: "studio-lumen-karlin",
+                studioName: "Studio Lumen Karlin",
+                ownerName: "Lumen Studios",
+                district: "Karlin",
+                tagline: "Soft daylight loft for portraits and product shoots.",
+                listingStatus: "in_review"
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/admin/studios/studio-lumen-karlin/review")) {
+        reviewRequests.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            studio: {
+              slug: "studio-lumen-karlin",
+              listingStatus: "published"
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+
+    expect(await screen.findByRole("heading", { name: "Listing review queue" })).toBeInTheDocument();
+    expect(screen.getByText("Studio Lumen Karlin")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve Studio Lumen Karlin listing" }));
+
+    expect(reviewRequests).toEqual([{ decision: "approve" }]);
+    expect(await screen.findByText("Studio Lumen Karlin published.")).toBeInTheDocument();
+  });
+
   it("filters studios by shoot type", async () => {
     const user = userEvent.setup();
     render(<App />);

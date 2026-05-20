@@ -1424,6 +1424,17 @@ h2 {
   line-height: 1.35;
 }
 
+.launch-next-steps .inline-action {
+  margin-left: auto;
+  border: 1px solid #191714;
+  border-radius: 8px;
+  background: #191714;
+  color: #fff;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .launch-webhook-url {
   display: block;
   max-width: 100%;

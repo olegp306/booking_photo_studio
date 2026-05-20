@@ -35,6 +35,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Owner room attribute editor for area, ceiling height, and capacity.
 - Owner logistics editor for props, access notes, and cancellation policy.
 - Owner listing moderation status with draft, in-review, and published states.
+- Admin-only listing review endpoints plus a Host launch review queue for approving submitted studios.
 - Owner media organizer for categorizing listing images as hero, rooms, examples, equipment, and props.
 - Room-specific media assignment with room thumbnails on studio detail pages.
 - Owner media ordering controls with hero promotion for mobile-friendly gallery curation.
@@ -79,7 +80,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 ## Next Roadmap
 
 1. Replace local JSON persistence with database-backed storage for bookings, calendar blocks, shortlists, and reviews.
-2. Replace prototype role switching with authentication, account creation, and permission checks for customers, photographers, studio owners, and admins.
+2. Replace prototype role switching with authentication, account creation, and broader permission checks for customers, photographers, studio owners, and admins.
 3. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
 4. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
 5. Add durable shared shortlist comments and role-aware decision history.

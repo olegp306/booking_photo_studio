@@ -297,3 +297,14 @@ export interface OwnerListingUpdate {
   cancellationPolicy?: string;
   listingStatus?: ListingStatus;
 }
+
+export interface ListingReviewItem {
+  studioSlug: string;
+  studioName: string;
+  ownerName: string;
+  district: string;
+  tagline: string;
+  listingStatus: ListingStatus;
+}
+
+export type ListingReviewDecision = "approve" | "reject";
