@@ -453,6 +453,7 @@ h2 {
   background: #fff;
   color: #191714;
   font: inherit;
+  font-weight: 500;
   padding: 12px;
 }
 
@@ -720,6 +721,69 @@ h2 {
   border-radius: 8px;
   background: #fff;
   padding: 14px;
+}
+
+.ai-draft-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.ai-draft-panel p {
+  color: #6e6259;
+  line-height: 1.4;
+}
+
+.ai-draft-panel label {
+  display: grid;
+  gap: 6px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ai-draft-panel textarea {
+  min-height: 112px;
+  width: 100%;
+  border: 1px solid #dccfc0;
+  border-radius: 8px;
+  background: #fff;
+  color: #191714;
+  font: inherit;
+  font-weight: 500;
+  padding: 12px;
+  resize: vertical;
+}
+
+.detected-filters {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fffaf4;
+  padding: 12px;
+}
+
+.detected-filters h2 {
+  font-size: 16px;
+}
+
+.detected-filters div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.detected-filters span {
+  border-radius: 999px;
+  background: #f0e5d8;
+  color: #6a4630;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 @media (min-width: 760px) {

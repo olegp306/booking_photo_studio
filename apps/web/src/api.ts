@@ -140,8 +140,13 @@ export const updateOwnerListing = async (studio: Studio, updates: OwnerListingUp
     return {
       ...studio,
       ...updates,
+      description: updates.description ?? studio.description,
       priceFrom: updates.priceFrom ?? studio.priceFrom,
       bookingMode: updates.bookingMode ?? studio.bookingMode,
+      shootTypes: updates.shootTypes ?? studio.shootTypes,
+      featureIds: updates.featureIds ?? studio.featureIds,
+      equipmentIds: updates.equipmentIds ?? studio.equipmentIds,
+      amenityIds: updates.amenityIds ?? studio.amenityIds,
       rules: updates.rules ?? studio.rules
     };
   }

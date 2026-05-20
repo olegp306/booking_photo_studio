@@ -224,8 +224,13 @@ export const buildServer = () => {
     const updated = {
       ...current,
       tagline: request.body.tagline ?? current.tagline,
+      description: request.body.description ?? current.description,
       priceFrom: request.body.priceFrom ?? current.priceFrom,
       bookingMode: request.body.bookingMode ?? current.bookingMode,
+      shootTypes: request.body.shootTypes ?? current.shootTypes,
+      featureIds: request.body.featureIds ?? current.featureIds,
+      equipmentIds: request.body.equipmentIds ?? current.equipmentIds,
+      amenityIds: request.body.amenityIds ?? current.amenityIds,
       rules: request.body.rules ?? current.rules
     };
     studios[studioIndex] = updated;

@@ -154,4 +154,24 @@ describe("App", () => {
     expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
     expect(screen.getByText("Soft editorial loft for portraits")).toBeInTheDocument();
   });
+
+  it("creates an AI listing draft from owner notes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.type(
+      screen.getByLabelText("AI voice or text draft"),
+      "Soft daylight studio for fashion and product shoots with cyclorama, softboxes, c-stands, makeup station, dressing room, wifi, and product table. Minimum booking is 2 hours."
+    );
+    await user.click(screen.getByRole("button", { name: "Generate listing draft" }));
+
+    expect(screen.getByDisplayValue("Soft daylight studio for fashion and product shoots.")).toBeInTheDocument();
+    expect(screen.getByText("Fashion")).toBeInTheDocument();
+    expect(screen.getByText("Product")).toBeInTheDocument();
+    expect(screen.getByText("Cyclorama")).toBeInTheDocument();
+    expect(screen.getByText("Softboxes")).toBeInTheDocument();
+    expect(screen.getByText("Makeup station")).toBeInTheDocument();
+  });
 });

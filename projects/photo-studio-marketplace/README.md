@@ -15,6 +15,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Owner inbox for approving and declining booking requests.
 - Customer bookings view with payment CTA placeholder.
 - Saved studios shortlist for comparing and sharing candidates.
+- Owner listing editor with AI-ready draft generation from voice or text notes.
 
 ## Project Docs
 
@@ -27,8 +28,10 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
 3. Integrate real payments with Stripe Checkout and a future owner payout model.
-4. Build the owner listing editor for rooms, equipment, props, images, rules, and pricing.
-5. Add owner calendar management, blocked time, and availability overrides.
-6. Add shareable studio pages and saved-list sharing between clients and photographers.
-7. Add post-booking lifecycle: messages, confirmations, reviews, and receipts.
-8. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.
+4. Expand the owner listing editor for rooms, equipment, props, images, rules, and pricing.
+5. Connect the AI listing assistant to voice input and OpenAI so owners can generate structured listings from spoken notes.
+6. Add AI media helper flows to classify uploaded images as hero, room, example, equipment, or props.
+7. Add owner calendar management, blocked time, and availability overrides.
+8. Add shareable studio pages and saved-list sharing between clients and photographers.
+9. Add post-booking lifecycle: messages, confirmations, reviews, and receipts.
+10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

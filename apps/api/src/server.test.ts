@@ -139,8 +139,13 @@ describe("studio API", () => {
       url: "/owner/studios/studio-lumen-karlin",
       payload: {
         tagline: "Soft editorial loft for portraits",
+        description: "A daylight studio for fashion and product shoots.",
         priceFrom: 1450,
         bookingMode: "request",
+        shootTypes: ["fashion", "product"],
+        featureIds: ["natural-light", "cyclorama"],
+        equipmentIds: ["softboxes"],
+        amenityIds: ["makeup-station"],
         rules: ["Minimum booking 2 hours", "No glitter"]
       }
     });
@@ -150,8 +155,13 @@ describe("studio API", () => {
       expect.objectContaining({
         slug: "studio-lumen-karlin",
         tagline: "Soft editorial loft for portraits",
+        description: "A daylight studio for fashion and product shoots.",
         priceFrom: 1450,
         bookingMode: "request",
+        shootTypes: ["fashion", "product"],
+        featureIds: ["natural-light", "cyclorama"],
+        equipmentIds: ["softboxes"],
+        amenityIds: ["makeup-station"],
         rules: ["Minimum booking 2 hours", "No glitter"]
       })
     );

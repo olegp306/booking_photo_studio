@@ -18,12 +18,15 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   amenityLabels,
+  draftListingFromTranscript,
   equipmentLabels,
   featureLabels,
   shootTypeLabels,
   type AvailabilitySlot,
   type BookingMode,
   type BookingIntent,
+  type AmenityId,
+  type EquipmentId,
   type FeatureId,
   type OwnerListingUpdate,
   type ShootType,
@@ -856,18 +859,40 @@ interface OwnerListingEditorProps {
 
 const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps) => {
   const hero = studio.images.find((image) => image.kind === "hero") ?? studio.images[0];
+  const [aiDraft, setAiDraft] = useState("");
   const [tagline, setTagline] = useState(studio.tagline);
+  const [description, setDescription] = useState(studio.description);
   const [priceFrom, setPriceFrom] = useState(String(studio.priceFrom));
   const [bookingMode, setBookingMode] = useState<BookingMode>(studio.bookingMode);
+  const [shootTypes, setShootTypes] = useState<ShootType[]>(studio.shootTypes);
+  const [featureIds, setFeatureIds] = useState<FeatureId[]>(studio.featureIds);
+  const [equipmentIds, setEquipmentIds] = useState<EquipmentId[]>(studio.equipmentIds);
+  const [amenityIds, setAmenityIds] = useState<AmenityId[]>(studio.amenityIds);
   const [rules, setRules] = useState(studio.rules.join("\n"));
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setTagline(studio.tagline);
+    setDescription(studio.description);
     setPriceFrom(String(studio.priceFrom));
     setBookingMode(studio.bookingMode);
+    setShootTypes(studio.shootTypes);
+    setFeatureIds(studio.featureIds);
+    setEquipmentIds(studio.equipmentIds);
+    setAmenityIds(studio.amenityIds);
     setRules(studio.rules.join("\n"));
   }, [studio]);
+
+  const generateDraft = () => {
+    const draft = draftListingFromTranscript(aiDraft);
+    setTagline(draft.tagline);
+    setDescription(draft.description);
+    if (draft.shootTypes.length) setShootTypes(draft.shootTypes);
+    if (draft.featureIds.length) setFeatureIds(draft.featureIds);
+    if (draft.equipmentIds.length) setEquipmentIds(draft.equipmentIds);
+    if (draft.amenityIds.length) setAmenityIds(draft.amenityIds);
+    if (draft.rules.length) setRules(draft.rules.join("\n"));
+  };
 
   const submitListing = async (event: FormEvent) => {
     event.preventDefault();
@@ -878,8 +903,13 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
 
     await onUpdateListing(studio, {
       tagline,
+      description,
       priceFrom: Number(priceFrom),
       bookingMode,
+      shootTypes,
+      featureIds,
+      equipmentIds,
+      amenityIds,
       rules: updatedRules
     });
     setSaved(true);
@@ -912,11 +942,51 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
         </div>
       </article>
 
+      <article className="ai-draft-panel">
+        <div>
+          <p className="eyebrow">AI assistant</p>
+          <h2>Draft from voice notes</h2>
+          <p>Paste a transcript now; this is ready to connect to speech and OpenAI later.</p>
+        </div>
+        <label>
+          AI voice or text draft
+          <textarea
+            value={aiDraft}
+            onChange={(event) => setAiDraft(event.target.value)}
+            placeholder="Describe rooms, light, equipment, props, rules, and shoot types."
+          />
+        </label>
+        <button className="request-button" onClick={generateDraft} type="button">
+          Generate listing draft
+        </button>
+      </article>
+
       <form className="booking-form listing-form" onSubmit={submitListing}>
         <label>
           Listing tagline
           <input value={tagline} onChange={(event) => setTagline(event.target.value)} required />
         </label>
+        <label>
+          Listing description
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} required />
+        </label>
+        <section className="detected-filters" aria-label="Detected listing filters">
+          <h2>Detected filters</h2>
+          <div>
+            {shootTypes.map((shootType) => (
+              <span key={shootType}>{shootTypeLabels[shootType]}</span>
+            ))}
+            {featureIds.map((feature) => (
+              <span key={feature}>{featureLabels[feature]}</span>
+            ))}
+            {equipmentIds.map((equipment) => (
+              <span key={equipment}>{equipmentLabels[equipment]}</span>
+            ))}
+            {amenityIds.map((amenity) => (
+              <span key={amenity}>{amenityLabels[amenity]}</span>
+            ))}
+          </div>
+        </section>
         <label>
           Starting price
           <input

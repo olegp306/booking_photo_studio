@@ -174,7 +174,12 @@ export interface BookingIntent {
 
 export interface OwnerListingUpdate {
   tagline?: string;
+  description?: string;
   priceFrom?: number;
   bookingMode?: BookingMode;
+  shootTypes?: ShootType[];
+  featureIds?: FeatureId[];
+  equipmentIds?: EquipmentId[];
+  amenityIds?: AmenityId[];
   rules?: string[];
 }
