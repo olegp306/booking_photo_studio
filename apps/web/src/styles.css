@@ -228,6 +228,13 @@ h2 {
   color: #191714;
 }
 
+.review-count {
+  margin: 2px 0 0;
+  color: #6e6259;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .card-body p,
 .description,
 .room-card p {
@@ -544,6 +551,37 @@ h2 {
   background: #e8f4ea;
   color: #245a2f;
   padding: 12px;
+  font-weight: 800;
+}
+
+.booking-receipt {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fbf8f4;
+  padding: 12px;
+}
+
+.booking-receipt h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.receipt-lines {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.receipt-lines p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #191714;
+  font-size: 13px;
   font-weight: 800;
 }
 

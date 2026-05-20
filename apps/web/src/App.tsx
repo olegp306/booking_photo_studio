@@ -477,6 +477,7 @@ const StudioCard = ({ studio, isSaved, onOpen, onSave }: StudioCardProps) => {
             {studio.rating}
           </span>
         </button>
+        <p className="review-count">{studio.reviewCount} reviews</p>
         <p>{studio.district} · {studio.tagline}</p>
         <div className="tag-row">
           {studio.moodTags.slice(0, 3).map((tag) => (
@@ -594,6 +595,7 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
               <Star size={16} fill="currentColor" />
               {studio.rating}
             </span>
+            <span className="review-count">{studio.reviewCount} reviews</span>
           </div>
         </div>
 
@@ -844,6 +846,22 @@ const CustomerBookings = ({
 
               {confirmedPaymentFor === booking.id && (
                 <p className="booking-status">Payment captured: booking confirmed.</p>
+              )}
+
+              {(booking.status === "confirmed" || booking.status === "completed") && (
+                <section className="booking-receipt" aria-label={`Receipt for ${booking.studioName}`}>
+                  <div>
+                    <p className="eyebrow">Receipt</p>
+                    <h3>Receipt #{booking.id}</h3>
+                  </div>
+                  <div className="receipt-lines">
+                    <p>Paid {accessibleMoney(booking.totalPrice, booking.currency)}</p>
+                    <p>Payment status: {booking.status === "completed" ? "Completed" : "Confirmed"}</p>
+                    <p>
+                      Shoot time: {booking.date} at {booking.startTime}
+                    </p>
+                  </div>
+                </section>
               )}
 
               {booking.status === "completed" && !reviewedStudios[booking.id] && (

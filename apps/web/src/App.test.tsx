@@ -166,6 +166,9 @@ describe("App", () => {
 
     expect(await screen.findByText("Confirmed")).toBeInTheDocument();
     expect(await screen.findByText("Payment captured: booking confirmed.")).toBeInTheDocument();
+    expect(screen.getByText("Receipt #studio-lumen-karlin-lumen-product-2026-06-12-11-00-marta-example-com")).toBeInTheDocument();
+    expect(screen.getByText("Paid CZK 1,400")).toBeInTheDocument();
+    expect(screen.getByText("Payment status: Confirmed")).toBeInTheDocument();
   });
 
   it("lets owners mark confirmed bookings completed", async () => {
@@ -222,6 +225,7 @@ describe("App", () => {
     await user.click(screen.getByRole("link", { name: "Explore" }));
 
     expect(await screen.findByText("4.91")).toBeInTheDocument();
+    expect(await screen.findByText("129 reviews")).toBeInTheDocument();
   }, 20000);
 
   it("shows saved studios and opens a saved studio detail", async () => {
