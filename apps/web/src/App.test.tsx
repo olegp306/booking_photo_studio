@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
@@ -168,10 +168,26 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Generate listing draft" }));
 
     expect(screen.getByDisplayValue("Soft daylight studio for fashion and product shoots.")).toBeInTheDocument();
-    expect(screen.getByText("Fashion")).toBeInTheDocument();
-    expect(screen.getByText("Product")).toBeInTheDocument();
-    expect(screen.getByText("Cyclorama")).toBeInTheDocument();
-    expect(screen.getByText("Softboxes")).toBeInTheDocument();
-    expect(screen.getByText("Makeup station")).toBeInTheDocument();
+    const detectedFilters = within(screen.getByLabelText("Detected listing filters"));
+    expect(detectedFilters.getByText("Fashion")).toBeInTheDocument();
+    expect(detectedFilters.getByText("Product")).toBeInTheDocument();
+    expect(detectedFilters.getByText("Cyclorama")).toBeInTheDocument();
+    expect(detectedFilters.getByText("Softboxes")).toBeInTheDocument();
+    expect(detectedFilters.getByText("Makeup station")).toBeInTheDocument();
+  });
+
+  it("lets owners manually refine AI-detected listing filters", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.click(screen.getByRole("button", { name: "Add Video shoot type" }));
+    await user.click(screen.getByRole("button", { name: "Add Projector equipment" }));
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    expect(screen.getAllByText("Video").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Projector").length).toBeGreaterThan(0);
   });
 });

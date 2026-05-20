@@ -57,6 +57,10 @@ const accessibleMoney = (amount: number, currency: string) =>
 
 const selectedFeatures: FeatureId[] = ["natural-light", "cyclorama", "blackout", "bedroom-set"];
 const shootTypes: ShootType[] = ["portrait", "fashion", "maternity", "product", "video", "content"];
+const shootTypeOptions = Object.entries(shootTypeLabels) as Array<[ShootType, string]>;
+const featureOptions = Object.entries(featureLabels) as Array<[FeatureId, string]>;
+const equipmentOptions = Object.entries(equipmentLabels) as Array<[EquipmentId, string]>;
+const amenityOptions = Object.entries(amenityLabels) as Array<[AmenityId, string]>;
 type AppView = "explore" | "saved" | "bookings" | "host";
 
 const initialViewFromHash = (): AppView => {
@@ -894,6 +898,30 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     if (draft.rules.length) setRules(draft.rules.join("\n"));
   };
 
+  const toggleShootType = (shootType: ShootType) => {
+    setShootTypes((current) =>
+      current.includes(shootType) ? current.filter((item) => item !== shootType) : [...current, shootType]
+    );
+  };
+
+  const toggleFeature = (feature: FeatureId) => {
+    setFeatureIds((current) =>
+      current.includes(feature) ? current.filter((item) => item !== feature) : [...current, feature]
+    );
+  };
+
+  const toggleEquipment = (equipment: EquipmentId) => {
+    setEquipmentIds((current) =>
+      current.includes(equipment) ? current.filter((item) => item !== equipment) : [...current, equipment]
+    );
+  };
+
+  const toggleAmenity = (amenity: AmenityId) => {
+    setAmenityIds((current) =>
+      current.includes(amenity) ? current.filter((item) => item !== amenity) : [...current, amenity]
+    );
+  };
+
   const submitListing = async (event: FormEvent) => {
     event.preventDefault();
     const updatedRules = rules
@@ -985,6 +1013,85 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
             {amenityIds.map((amenity) => (
               <span key={amenity}>{amenityLabels[amenity]}</span>
             ))}
+          </div>
+        </section>
+        <section className="filter-editor" aria-label="Editable listing filters">
+          <h2>Refine filters</h2>
+          <div className="filter-group">
+            <h3>Shoot types</h3>
+            <div>
+              {shootTypeOptions.map(([shootType, label]) => {
+                const active = shootTypes.includes(shootType);
+                return (
+                  <button
+                    aria-label={`${active ? "Remove" : "Add"} ${label} shoot type`}
+                    className={`filter-toggle ${active ? "active" : ""}`}
+                    key={shootType}
+                    onClick={() => toggleShootType(shootType)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="filter-group">
+            <h3>Features</h3>
+            <div>
+              {featureOptions.map(([feature, label]) => {
+                const active = featureIds.includes(feature);
+                return (
+                  <button
+                    aria-label={`${active ? "Remove" : "Add"} ${label} feature`}
+                    className={`filter-toggle ${active ? "active" : ""}`}
+                    key={feature}
+                    onClick={() => toggleFeature(feature)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="filter-group">
+            <h3>Equipment</h3>
+            <div>
+              {equipmentOptions.map(([equipment, label]) => {
+                const active = equipmentIds.includes(equipment);
+                return (
+                  <button
+                    aria-label={`${active ? "Remove" : "Add"} ${label} equipment`}
+                    className={`filter-toggle ${active ? "active" : ""}`}
+                    key={equipment}
+                    onClick={() => toggleEquipment(equipment)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="filter-group">
+            <h3>Amenities</h3>
+            <div>
+              {amenityOptions.map(([amenity, label]) => {
+                const active = amenityIds.includes(amenity);
+                return (
+                  <button
+                    aria-label={`${active ? "Remove" : "Add"} ${label} amenity`}
+                    className={`filter-toggle ${active ? "active" : ""}`}
+                    key={amenity}
+                    onClick={() => toggleAmenity(amenity)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </section>
         <label>

@@ -786,6 +786,54 @@ h2 {
   font-weight: 800;
 }
 
+.filter-editor {
+  display: grid;
+  gap: 13px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.filter-editor h2 {
+  font-size: 16px;
+}
+
+.filter-group {
+  display: grid;
+  gap: 8px;
+}
+
+.filter-group h3 {
+  color: #6e6259;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.filter-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.filter-toggle {
+  border: 1px solid #eadfd2;
+  border-radius: 999px;
+  background: #fffaf4;
+  color: #312b26;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.filter-toggle.active {
+  border-color: #191714;
+  background: #191714;
+  color: #fff;
+}
+
 @media (min-width: 760px) {
   body {
     background: #e9ded1;
