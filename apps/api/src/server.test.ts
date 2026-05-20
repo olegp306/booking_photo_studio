@@ -418,6 +418,90 @@ describe("studio API", () => {
     ]);
   });
 
+  it("returns and updates the current role-aware session", async () => {
+    const server = buildServer();
+
+    const current = await server.inject({
+      method: "GET",
+      url: "/session"
+    });
+
+    expect(current.statusCode).toBe(200);
+    expect(current.json().session).toEqual(
+      expect.objectContaining({
+        role: "photographer",
+        displayName: "Marta Photographer"
+      })
+    );
+
+    const updated = await server.inject({
+      method: "PATCH",
+      url: "/session",
+      payload: {
+        role: "studio_owner",
+        displayName: "Studio Lumen Owner"
+      }
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().session).toEqual(
+      expect.objectContaining({
+        role: "studio_owner",
+        displayName: "Studio Lumen Owner"
+      })
+    );
+  });
+
+  it("persists role-aware sessions across API restarts", async () => {
+    const localDataDir = mkdtempSync(join(tmpdir(), "studio-session-"));
+    const server = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    await server.inject({
+      method: "PATCH",
+      url: "/session",
+      payload: {
+        role: "client",
+        displayName: "Anna Client"
+      }
+    });
+
+    const restartedServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const current = await restartedServer.inject({
+      method: "GET",
+      url: "/session"
+    });
+
+    expect(current.statusCode).toBe(200);
+    expect(current.json().session).toEqual(
+      expect.objectContaining({
+        role: "client",
+        displayName: "Anna Client"
+      })
+    );
+  });
+
+  it("rejects unsupported session roles", async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/session",
+      payload: {
+        role: "admin-owner"
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("INVALID_SESSION_ROLE");
+  });
+
   it("registers a Telegram listing draft webhook when launch config is ready", async () => {
     const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({

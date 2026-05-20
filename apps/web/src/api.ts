@@ -24,12 +24,15 @@ import {
   type StudioReview,
   type StudioReviewRequest,
   type StudioRoom,
-  type StudioSearchFilters
+  type StudioSearchFilters,
+  type UserRole,
+  type UserSession
 } from "@studio-market/shared";
 
 const API_BASE = "/api";
 export type AiDraftMode = "local-fallback" | "openai";
 export type ImportedDraftMode = "local-fallback" | "openai";
+export type { UserRole, UserSession };
 
 export interface LaunchServiceReadiness {
   configured: boolean;
@@ -78,6 +81,11 @@ export interface MediaSuggestionResult {
 
 const localShortlists = new Map<string, SharedShortlist>();
 const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
+let localSession: UserSession = {
+  id: "demo-session",
+  role: "photographer",
+  displayName: "Marta Photographer"
+};
 let localShortlistCount = 0;
 let localAvailabilityBlockCount = 0;
 
@@ -142,6 +150,50 @@ export const loadLaunchReadiness = async (): Promise<LaunchReadiness> => {
     return (await response.json()) as LaunchReadiness;
   } catch {
     return fallbackLaunchReadiness;
+  }
+};
+
+export const loadSession = async (): Promise<UserSession> => {
+  try {
+    const response = await fetch(`${API_BASE}/session`);
+    if (!response.ok) throw new Error("Failed to load session");
+    const payload = (await response.json()) as { session: UserSession };
+    localSession = payload.session;
+    return payload.session;
+  } catch {
+    return localSession;
+  }
+};
+
+export const updateSessionRole = async (role: UserRole): Promise<UserSession> => {
+  const fallbackSession: UserSession = {
+    ...localSession,
+    role,
+    displayName:
+      role === "studio_owner"
+        ? "Studio Lumen Owner"
+        : role === "client"
+          ? "Anna Client"
+          : role === "admin"
+            ? "Marketplace Admin"
+            : "Marta Photographer"
+  };
+
+  try {
+    const response = await fetch(`${API_BASE}/session`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(fallbackSession)
+    });
+    if (!response.ok) throw new Error("Failed to update session role");
+    const payload = (await response.json()) as { session: UserSession };
+    localSession = payload.session;
+    return payload.session;
+  } catch {
+    localSession = fallbackSession;
+    return fallbackSession;
   }
 };
 
@@ -496,6 +548,11 @@ export const releaseOwnerAvailabilityBlock = async (blockId: string): Promise<vo
 export const resetLocalApiStateForTests = () => {
   localShortlists.clear();
   localAvailabilityBlocks.splice(0, localAvailabilityBlocks.length);
+  localSession = {
+    id: "demo-session",
+    role: "photographer",
+    displayName: "Marta Photographer"
+  };
   localShortlistCount = 0;
   localAvailabilityBlockCount = 0;
 };

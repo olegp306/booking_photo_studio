@@ -28,6 +28,46 @@ describe("App", () => {
     expect(screen.getByText("Framehouse Smichov")).toBeInTheDocument();
   });
 
+  it("lets users switch the prototype session role", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/session") && init?.method === "PATCH") {
+        return new Response(
+          JSON.stringify({
+            session: {
+              id: "demo-session",
+              role: "studio_owner",
+              displayName: "Studio Lumen Owner"
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/session")) {
+        return new Response(
+          JSON.stringify({
+            session: {
+              id: "demo-session",
+              role: "photographer",
+              displayName: "Marta Photographer"
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    expect(await screen.findByText("Marta Photographer")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Prototype session")).getAllByText("Photographer").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Use Studio owner role" }));
+
+    expect(await screen.findByText("Studio Lumen Owner")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Prototype session")).getAllByText("Studio owner").length).toBeGreaterThan(0);
+  });
+
   it("filters studios by shoot type", async () => {
     const user = userEvent.setup();
     render(<App />);

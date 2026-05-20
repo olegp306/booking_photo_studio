@@ -1,5 +1,12 @@
 export type BookingMode = "instant" | "request" | "hybrid";
 export type ListingStatus = "draft" | "in_review" | "published";
+export type UserRole = "client" | "photographer" | "studio_owner" | "admin";
+
+export interface UserSession {
+  id: string;
+  role: UserRole;
+  displayName: string;
+}
 
 export type ShootType =
   | "portrait"

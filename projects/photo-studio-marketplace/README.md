@@ -28,6 +28,8 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Persisted shared shortlist resources with short `#shortlist/<id>` links.
 - Persisted shortlist decision and note updates on shared links.
 - Booking requests, owner calendar blocks, and shared shortlists can persist to local JSON storage through `LOCAL_DATA_DIR`.
+- Prototype role-aware session with client, photographer, and studio owner modes.
+- Session role can persist to local JSON storage through `LOCAL_DATA_DIR`.
 - Owner listing editor with AI-ready draft generation from voice or text notes.
 - Owner room editor for room descriptions, hourly pricing, and room-level booking mode.
 - Owner room attribute editor for area, ceiling height, and capacity.
@@ -58,7 +60,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Fill local secrets in `../../.env.local`; the committed template is `../../.env.example`.
 - Required for the live Telegram and AI pass: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `PUBLIC_APP_URL`.
 - Optional but recommended for bot webhook hardening: `TELEGRAM_WEBHOOK_SECRET`.
-- Optional local persistence path for imported owner drafts, booking requests, calendar blocks, and shared shortlists: `LOCAL_DATA_DIR`.
+- Optional local persistence path for imported owner drafts, booking requests, calendar blocks, shared shortlists, and prototype sessions: `LOCAL_DATA_DIR`.
 - Optional until production payments are wired: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `OPENAI_LISTING_MODEL`.
 
 ## Project Docs
@@ -70,10 +72,10 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 ## Next Roadmap
 
 1. Replace local JSON persistence with database-backed storage for bookings, calendar blocks, shortlists, and reviews.
-2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
+2. Replace prototype role switching with authentication, account creation, and permission checks for customers, photographers, studio owners, and admins.
 3. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
 4. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
-5. Add authentication and durable database storage for shared shortlist comments and decisions.
+5. Add durable shared shortlist comments and role-aware decision history.
 6. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
 7. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
 8. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

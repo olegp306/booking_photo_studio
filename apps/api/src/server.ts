@@ -26,7 +26,9 @@ import {
   type ShootType,
   type StudioReview,
   type StudioReviewRequest,
-  type StudioSearchFilters
+  type StudioSearchFilters,
+  type UserRole,
+  type UserSession
 } from "@studio-market/shared";
 import { generateListingDraft, type FetchLike } from "./aiListing";
 import { suggestMediaDetails } from "./aiMedia";
@@ -46,6 +48,16 @@ const toArray = <T extends string>(value: string | string[] | undefined): T[] | 
   const values = Array.isArray(value) ? value : value.split(",");
   return values.map((item) => item.trim()).filter(Boolean) as T[];
 };
+
+const supportedSessionRoles: UserRole[] = ["client", "photographer", "studio_owner", "admin"];
+const defaultSession: UserSession = {
+  id: "demo-session",
+  role: "photographer",
+  displayName: "Marta Photographer"
+};
+
+const isUserRole = (role: unknown): role is UserRole =>
+  typeof role === "string" && supportedSessionRoles.includes(role as UserRole);
 
 interface BuildServerOptions {
   config?: Partial<RuntimeConfig>;
@@ -71,6 +83,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   const bookingIntentStore = createJsonResourceStore<BookingIntent>(config.localDataDir, "booking-intents.json");
   const shortlistStore = createJsonResourceStore<SharedShortlist>(config.localDataDir, "shared-shortlists.json");
   const availabilityBlockStore = createJsonResourceStore<OwnerAvailabilityBlock>(config.localDataDir, "availability-blocks.json");
+  const sessionStore = createJsonResourceStore<UserSession>(config.localDataDir, "sessions.json");
   const listingDraftStore = createListingDraftStore(config.localDataDir);
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
@@ -97,6 +110,36 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   }));
 
   app.get("/readiness", async () => getLaunchReadiness(config));
+
+  app.get("/session", async () => ({
+    session: (await sessionStore.list())[0] ?? defaultSession
+  }));
+
+  app.patch<{
+    Body: {
+      role?: unknown;
+      displayName?: string;
+    };
+  }>("/session", async (request, reply) => {
+    if (!isUserRole(request.body.role)) {
+      return reply.code(400).send({
+        error: "INVALID_SESSION_ROLE",
+        message: "Session role must be client, photographer, studio_owner, or admin"
+      });
+    }
+
+    const current = (await sessionStore.list())[0] ?? defaultSession;
+    const session: UserSession = {
+      ...current,
+      role: request.body.role,
+      displayName: request.body.displayName?.trim() || current.displayName
+    };
+    await sessionStore.setAll([session]);
+
+    return {
+      session
+    };
+  });
 
   app.post<{
     Body: {

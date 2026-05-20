@@ -46,6 +46,7 @@ import {
   createSharedShortlist,
   decideOwnerBooking,
   generateListingDraft,
+  loadSession,
   loadAvailability,
   loadCustomerBookings,
   loadLaunchReadiness,
@@ -61,10 +62,13 @@ import {
   submitBookingRequest,
   suggestMediaDetails as suggestMediaDetailsFromApi,
   updateOwnerListing,
+  updateSessionRole,
   updateSharedShortlist,
   type ImportedListingDraft,
   type MediaSuggestionResult,
-  type LaunchReadiness
+  type LaunchReadiness,
+  type UserRole,
+  type UserSession
 } from "./api";
 
 const money = (amount: number, currency: string) =>
@@ -120,6 +124,13 @@ const shortlistDecisionLabels: Record<ShortlistDecision, string> = {
   backup: "Backup",
   rejected: "Rejected"
 };
+const roleLabels: Record<UserRole, string> = {
+  client: "Client",
+  photographer: "Photographer",
+  studio_owner: "Studio owner",
+  admin: "Admin"
+};
+const roleOptions: UserRole[] = ["client", "photographer", "studio_owner"];
 
 const initialViewFromHash = (): ExtendedAppView => {
   if (window.location.hash.startsWith("#telegram-drafts")) return "telegram-drafts";
@@ -165,6 +176,11 @@ export const App = () => {
   const [shortlistItems, setShortlistItems] = useState<Record<string, SharedShortlistItem>>({});
   const [activeShortlistId, setActiveShortlistId] = useState<string | undefined>();
   const [ownerInitialTab, setOwnerInitialTab] = useState<OwnerDashboardTab>("requests");
+  const [session, setSession] = useState<UserSession>({
+    id: "demo-session",
+    role: "photographer",
+    displayName: "Marta Photographer"
+  });
 
   const filters: StudioSearchFilters = useMemo(
     () => ({
@@ -178,6 +194,10 @@ export const App = () => {
   useEffect(() => {
     loadStudios(filters).then(setStudios);
   }, [filters]);
+
+  useEffect(() => {
+    loadSession().then(setSession);
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => setHashVersion((current) => current + 1);
@@ -307,6 +327,11 @@ export const App = () => {
     setSelectedStudio(undefined);
   };
 
+  const changeSessionRole = async (role: UserRole) => {
+    const updated = await updateSessionRole(role);
+    setSession(updated);
+  };
+
   if (selectedStudio) {
     return (
       <StudioDetail
@@ -407,6 +432,8 @@ export const App = () => {
           setStudios((current) => current.map((item) => (item.slug === updated.slug ? updated : item)));
           return updated;
         }}
+        session={session}
+        onChangeSessionRole={changeSessionRole}
       />
     );
   }
@@ -432,9 +459,7 @@ export const App = () => {
             <p className="eyebrow">Prague launch</p>
             <h1>Find the right photo studio</h1>
           </div>
-          <button className="icon-button" aria-label="Profile">
-            <UserRound size={20} />
-          </button>
+          <AccountSwitcher session={session} onChangeRole={changeSessionRole} />
         </div>
 
         <div className="search-card">
@@ -517,6 +542,37 @@ export const App = () => {
     </main>
   );
 };
+
+interface AccountSwitcherProps {
+  session: UserSession;
+  onChangeRole: (role: UserRole) => Promise<void>;
+}
+
+const AccountSwitcher = ({ session, onChangeRole }: AccountSwitcherProps) => (
+  <section className="account-switcher" aria-label="Prototype session">
+    <div className="account-summary">
+      <UserRound size={18} />
+      <div>
+        <strong>{session.displayName}</strong>
+        <span>{roleLabels[session.role]}</span>
+      </div>
+    </div>
+    <div className="role-toggle" role="group" aria-label="Session role">
+      {roleOptions.map((role) => (
+        <button
+          className={session.role === role ? "active" : ""}
+          key={role}
+          onClick={() => onChangeRole(role)}
+          type="button"
+          aria-label={`Use ${roleLabels[role]} role`}
+        >
+          {roleLabels[role]}
+        </button>
+      ))}
+    </div>
+  </section>
+);
+
 interface StudioCardProps {
   studio: Studio;
   isSaved: boolean;
@@ -820,6 +876,8 @@ interface OwnerDashboardProps {
   onBlockAvailability: (block: Omit<OwnerAvailabilityBlock, "id">) => Promise<OwnerAvailabilityBlock>;
   onReleaseAvailability: (blockId: string) => Promise<void>;
   onUpdateListing: (studio: Studio, updates: OwnerListingUpdate) => Promise<Studio>;
+  session: UserSession;
+  onChangeSessionRole: (role: UserRole) => Promise<void>;
 }
 
 const statusLabel = (status: BookingIntent["status"]) => {
@@ -1352,7 +1410,9 @@ const OwnerDashboard = ({
   onSendMessage,
   onBlockAvailability,
   onReleaseAvailability,
-  onUpdateListing
+  onUpdateListing,
+  session,
+  onChangeSessionRole
 }: OwnerDashboardProps) => {
   const [activeTab, setActiveTab] = useState<OwnerDashboardTab>(initialTab);
   const ownerTitle =
@@ -1400,6 +1460,7 @@ const OwnerDashboard = ({
             <Search size={20} />
           </button>
         </div>
+        <AccountSwitcher session={session} onChangeRole={onChangeSessionRole} />
         <div className="owner-summary">
           {ownerSummary.icon}
           <div>

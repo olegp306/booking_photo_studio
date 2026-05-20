@@ -92,6 +92,68 @@ h2 {
   height: 42px;
 }
 
+.account-switcher {
+  display: grid;
+  gap: 8px;
+  min-width: 168px;
+  max-width: 210px;
+}
+
+.account-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fffaf4;
+}
+
+.account-summary div {
+  min-width: 0;
+}
+
+.account-summary strong,
+.account-summary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-summary strong {
+  font-size: 13px;
+}
+
+.account-summary span {
+  margin-top: 2px;
+  color: #76685f;
+  font-size: 12px;
+}
+
+.role-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.role-toggle button {
+  min-width: 0;
+  padding: 7px 5px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.role-toggle .active {
+  border-color: #191714;
+  background: #191714;
+  color: #fff;
+}
+
 .search-card {
   display: grid;
   grid-template-columns: auto 1fr auto;
