@@ -1594,7 +1594,6 @@ interface OwnerListingEditorProps {
 }
 
 const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps) => {
-  const hero = studio.images.find((image) => image.kind === "hero") ?? studio.images[0];
   const [aiDraft, setAiDraft] = useState("");
   const [tagline, setTagline] = useState(studio.tagline);
   const [description, setDescription] = useState(studio.description);
@@ -1616,6 +1615,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
   const [rules, setRules] = useState(studio.rules.join("\n"));
   const [saved, setSaved] = useState(false);
   const [submittedForReview, setSubmittedForReview] = useState(false);
+  const previewHero = images.find((image) => image.kind === "hero") ?? images[0];
 
   useEffect(() => {
     setTagline(studio.tagline);
@@ -1709,6 +1709,27 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setMediaRoomId(rooms[0]?.id ?? "");
   };
 
+  const moveMedia = (imageId: string, direction: "up" | "down") => {
+    setImages((current) => {
+      const index = current.findIndex((image) => image.id === imageId);
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return current;
+
+      const next = [...current];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  };
+
+  const setHeroMedia = (imageId: string) => {
+    setImages((current) =>
+      current.map((image) => ({
+        ...image,
+        kind: image.id === imageId ? "hero" : image.kind === "hero" ? "room" : image.kind
+      }))
+    );
+  };
+
   const submitListing = async (event: FormEvent) => {
     event.preventDefault();
     const updatedRules = rules
@@ -1749,8 +1770,8 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
 
   return (
     <section className="owner-list listing-editor" aria-label="Owner listing editor">
-      <article className="listing-preview">
-        <img src={hero.url} alt={hero.alt} />
+      <article className="listing-preview" aria-label="Listing preview">
+        {previewHero && <img src={previewHero.url} alt={previewHero.alt} />}
         <div>
           <p className="eyebrow">{studio.district}</p>
           <h2>{studio.name}</h2>
@@ -2001,8 +2022,18 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
         <section className="media-editor" aria-label="Studio media library">
           <h2>Studio media</h2>
           <div className="media-grid">
-            {images.map((image) => (
-              <MediaCard image={image} key={image.id} rooms={rooms} />
+            {images.map((image, index) => (
+              <MediaCard
+                image={image}
+                isFirst={index === 0}
+                isLast={index === images.length - 1}
+                key={image.id}
+                onMoveDown={() => moveMedia(image.id, "down")}
+                onMoveUp={() => moveMedia(image.id, "up")}
+                onSetHero={() => setHeroMedia(image.id)}
+                position={index + 1}
+                rooms={rooms}
+              />
             ))}
           </div>
           <div className="media-form">
@@ -2127,19 +2158,54 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
 
 interface MediaCardProps {
   image: StudioImage;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveDown: () => void;
+  onMoveUp: () => void;
+  onSetHero: () => void;
+  position: number;
   rooms: StudioRoom[];
 }
 
-const MediaCard = ({ image, rooms }: MediaCardProps) => {
+const MediaCard = ({ image, isFirst, isLast, onMoveDown, onMoveUp, onSetHero, position, rooms }: MediaCardProps) => {
   const assignedRoom = rooms.find((room) => room.id === image.roomId || room.imageIds.includes(image.id));
 
   return (
     <article className="media-card">
       <img src={image.url} alt={image.alt} />
       <div>
-        <span>{mediaKindLabels[image.kind]}</span>
-        {assignedRoom ? <span className="media-room-label">{assignedRoom.name}</span> : null}
+        <div className="media-meta-row">
+          <span>{mediaKindLabels[image.kind]}</span>
+          <span>Position {position}</span>
+          {assignedRoom ? <span className="media-room-label">{assignedRoom.name}</span> : null}
+        </div>
         <p>{image.alt}</p>
+        <div className="media-actions">
+          <button
+            aria-label={`Move ${image.alt} media up`}
+            disabled={isFirst}
+            onClick={onMoveUp}
+            type="button"
+          >
+            Up
+          </button>
+          <button
+            aria-label={`Move ${image.alt} media down`}
+            disabled={isLast}
+            onClick={onMoveDown}
+            type="button"
+          >
+            Down
+          </button>
+          <button
+            aria-label={`Set ${image.alt} as hero media`}
+            disabled={image.kind === "hero"}
+            onClick={onSetHero}
+            type="button"
+          >
+            Hero
+          </button>
+        </div>
       </div>
     </article>
   );

@@ -632,4 +632,25 @@ describe("App", () => {
     expect(mediaLibrary.getByText("Second angle of the daylight cyclorama")).toBeInTheDocument();
     expect(mediaLibrary.getAllByText("Main Daylight Room").length).toBeGreaterThan(0);
   });
+
+  it("lets owners promote and reorder listing media", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.click(screen.getByRole("button", { name: "Set Editorial portrait example as hero media" }));
+    expect(within(screen.getByLabelText("Listing preview")).getByAltText("Editorial portrait example")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Move Editorial portrait example media up" }));
+    await user.click(screen.getByRole("button", { name: "Save listing changes" }));
+
+    expect(await screen.findByText("Listing updated.")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Listing preview")).getByAltText("Editorial portrait example")).toHaveAttribute(
+      "src",
+      "https://images.unsplash.com/photo-1512316609839-ce289d3eba0a?auto=format&fit=crop&w=1200&q=80"
+    );
+    const mediaLibrary = within(screen.getByLabelText("Studio media library"));
+    expect(mediaLibrary.getAllByText("Hero").length).toBeGreaterThan(0);
+    expect(mediaLibrary.getByText("Position 2")).toBeInTheDocument();
+  });
 });
