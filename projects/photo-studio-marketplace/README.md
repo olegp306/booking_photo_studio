@@ -43,12 +43,16 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Receipt download preparation action from customer bookings.
 - Launch readiness panel for OpenAI, Telegram owner bot, public app URL, and Stripe keys.
 - API readiness endpoint plus AI listing draft and Telegram webhook stubs with local fallback behavior.
+- OpenAI-backed listing draft generation through the Responses API when `OPENAI_API_KEY` is set.
+- Telegram owner onboarding webhook that stores imported listing drafts and replies with an owner dashboard link.
+- Owner listing editor import panel for applying Telegram drafts to the public studio profile.
 
 ## Local Launch Env
 
 - Fill local secrets in `../../.env.local`; the committed template is `../../.env.example`.
-- Required for the next live integration pass: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `PUBLIC_APP_URL`.
-- Optional until production payments are wired: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_SECRET`, and `OPENAI_LISTING_MODEL`.
+- Required for the live Telegram and AI pass: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `PUBLIC_APP_URL`.
+- Optional but recommended for bot webhook hardening: `TELEGRAM_WEBHOOK_SECRET`.
+- Optional until production payments are wired: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `OPENAI_LISTING_MODEL`.
 
 ## Project Docs
 
@@ -60,9 +64,9 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
-3. Wire the Telegram owner onboarding bot to the listing draft endpoint and public web app links.
+3. Add persistent storage for imported owner drafts so Telegram onboarding survives server restarts.
 4. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
-5. Connect the AI listing assistant to OpenAI so owners can generate structured listings from text and later voice notes.
+5. Add Telegram setup tooling for registering the webhook URL and validating the bot connection from the UI.
 6. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
 7. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
 8. Add authentication and durable database storage for shared shortlists, comments, and decisions.

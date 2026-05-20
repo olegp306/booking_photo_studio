@@ -1,12 +1,13 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { resetLocalApiStateForTests } from "./api";
 
 describe("App", () => {
   beforeEach(() => {
     window.location.hash = "";
+    vi.restoreAllMocks();
     resetLocalApiStateForTests();
   });
 
@@ -629,6 +630,50 @@ describe("App", () => {
     expect(screen.getByText("Stripe payments")).toBeInTheDocument();
     expect(screen.getByText("Missing OPENAI_API_KEY")).toBeInTheDocument();
     expect(screen.getByText("Missing TELEGRAM_BOT_TOKEN")).toBeInTheDocument();
+  });
+
+  it("lets owners apply imported Telegram listing drafts", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/owner/listing-drafts")) {
+        return new Response(
+          JSON.stringify({
+            drafts: [
+              {
+                id: "telegram-draft-7",
+                source: "telegram",
+                transcript: "AI parsed Telegram text",
+                createdAt: "2026-05-20T10:00:00.000Z",
+                draft: {
+                  tagline: "Telegram daylight studio for product shoots.",
+                  description: "Telegram owner described a daylight studio with product table and softboxes.",
+                  shootTypes: ["product"],
+                  featureIds: ["natural-light", "product-table"],
+                  equipmentIds: ["softboxes"],
+                  amenityIds: ["wifi"],
+                  rules: ["Minimum booking is 2 hours."]
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.click(await screen.findByRole("button", { name: "Use Telegram draft telegram-draft-7" }));
+
+    expect(await screen.findByDisplayValue("Telegram daylight studio for product shoots.")).toBeInTheDocument();
+    const detectedFilters = within(screen.getByLabelText("Detected listing filters"));
+    expect(detectedFilters.getByText("Product")).toBeInTheDocument();
+    expect(detectedFilters.getByText("Natural light")).toBeInTheDocument();
+    expect(detectedFilters.getByText("Product table")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Minimum booking is 2 hours.")).toBeInTheDocument();
   });
 
   it("lets owners manually refine AI-detected listing filters", async () => {

@@ -4,7 +4,6 @@ import {
   applyStudioReview,
   createBookingIntent,
   decideBookingIntent,
-  draftListingFromTranscript,
   findStudioBySlug,
   getAvailabilityForStudio,
   markBookingCompleted,
@@ -29,7 +28,15 @@ import {
   type StudioReviewRequest,
   type StudioSearchFilters
 } from "@studio-market/shared";
-import { getLaunchReadiness, hasConfiguredOpenAi, loadRuntimeConfig, type RuntimeConfig } from "./env";
+import { generateListingDraft, type FetchLike } from "./aiListing";
+import { getLaunchReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
+import {
+  extractTelegramChatId,
+  extractTelegramText,
+  isTelegramSecretValid,
+  sendTelegramListingDraftReply,
+  type TelegramDraftRecord
+} from "./telegram";
 
 const toArray = <T extends string>(value: string | string[] | undefined): T[] | undefined => {
   if (!value) return undefined;
@@ -39,22 +46,12 @@ const toArray = <T extends string>(value: string | string[] | undefined): T[] | 
 
 interface BuildServerOptions {
   config?: Partial<RuntimeConfig>;
+  fetch?: FetchLike;
 }
-
-const extractTelegramText = (body: unknown) => {
-  if (!body || typeof body !== "object") return "";
-  const payload = body as {
-    message?: {
-      text?: string;
-      caption?: string;
-    };
-  };
-
-  return payload.message?.text ?? payload.message?.caption ?? "";
-};
 
 export const buildServer = (options: BuildServerOptions = {}) => {
   const config = loadRuntimeConfig(options.config);
+  const fetchImpl = options.fetch ?? fetch;
   const app = Fastify({ logger: false });
   const studios = seedStudios.map((studio) => ({
     ...studio,
@@ -71,6 +68,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   const bookingIntents: BookingIntent[] = [];
   const shortlists: SharedShortlist[] = [];
   const availabilityBlocks: OwnerAvailabilityBlock[] = [];
+  const importedListingDrafts: TelegramDraftRecord[] = [];
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
   const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
@@ -111,15 +109,22 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
-    return {
-      mode: hasConfiguredOpenAi(config) ? "openai-ready" : "local-fallback",
-      draft: draftListingFromTranscript(transcript)
-    };
+    return generateListingDraft(transcript, config, fetchImpl);
   });
 
   app.post<{
+    Headers: {
+      "x-telegram-bot-api-secret-token"?: string;
+    };
     Body: unknown;
-  }>("/integrations/telegram/listing-draft", async (request) => {
+  }>("/integrations/telegram/listing-draft", async (request, reply) => {
+    if (!isTelegramSecretValid(config.telegramWebhookSecret, request.headers["x-telegram-bot-api-secret-token"])) {
+      return reply.code(401).send({
+        error: "INVALID_TELEGRAM_SECRET",
+        message: "Telegram webhook secret token did not match"
+      });
+    }
+
     const transcript = extractTelegramText(request.body).trim();
 
     if (!transcript) {
@@ -130,16 +135,34 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       };
     }
 
-    const draft = draftListingFromTranscript(transcript);
+    const { draft, mode } = await generateListingDraft(transcript, config, fetchImpl);
+    const chatId = extractTelegramChatId(request.body);
+    const record: TelegramDraftRecord = {
+      id: `telegram-draft-${importedListingDrafts.length + 1}`,
+      source: "telegram",
+      chatId,
+      transcript,
+      mode,
+      draft,
+      createdAt: new Date().toISOString()
+    };
+    importedListingDrafts.unshift(record);
+    const sentMessage = await sendTelegramListingDraftReply(chatId, record, config, fetchImpl);
 
     return {
       ok: true,
-      mode: hasConfiguredOpenAi(config) ? "openai-ready" : "local-fallback",
+      draftId: record.id,
+      mode,
       reply: "Listing draft ready. Open the owner dashboard to review and publish it.",
       webAppUrl: config.publicAppUrl || "http://localhost:5173",
+      sentMessage,
       draft
     };
   });
+
+  app.get("/owner/listing-drafts", async () => ({
+    drafts: importedListingDrafts
+  }));
 
   app.get<{
     Querystring: {

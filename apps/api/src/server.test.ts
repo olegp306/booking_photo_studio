@@ -86,11 +86,78 @@ describe("studio API", () => {
     );
   });
 
-  it("accepts Telegram owner bot listing draft webhooks", async () => {
+  it("uses OpenAI for listing drafts when an API key is configured", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({
       config: {
-        telegramBotToken: "",
+        openaiApiKey: "sk-test-openai",
+        openaiListingModel: "gpt-test-listing"
+      },
+      fetch: async (url, init) => {
+        requests.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              tagline: "AI-crafted daylight loft for campaign shoots.",
+              description: "AI structured description",
+              shootTypes: ["fashion", "product"],
+              featureIds: ["natural-light", "cyclorama"],
+              equipmentIds: ["softboxes"],
+              amenityIds: ["makeup-station"],
+              rules: ["Minimum booking is 2 hours."]
+            })
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/ai/listing-draft",
+      payload: {
+        transcript: "Daylight studio for campaign shoots"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        mode: "openai",
+        draft: expect.objectContaining({
+          tagline: "AI-crafted daylight loft for campaign shoots.",
+          shootTypes: ["fashion", "product"],
+          featureIds: ["natural-light", "cyclorama"]
+        })
+      })
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url).toBe("https://api.openai.com/v1/responses");
+    expect(requests[0].init?.headers).toEqual(
+      expect.objectContaining({
+        Authorization: "Bearer sk-test-openai"
+      })
+    );
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual(
+      expect.objectContaining({
+        model: "gpt-test-listing"
+      })
+    );
+  });
+
+  it("accepts Telegram owner bot listing draft webhooks", async () => {
+    const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
+    const server = buildServer({
+      config: {
+        telegramBotToken: "telegram-test-token",
         publicAppUrl: "https://studio.example.com"
+      },
+      fetch: async (url, init) => {
+        telegramRequests.push({ url: String(url), init });
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
       }
     });
     const response = await server.inject({
@@ -108,15 +175,62 @@ describe("studio API", () => {
     expect(response.json()).toEqual(
       expect.objectContaining({
         ok: true,
+        draftId: "telegram-draft-1",
         mode: "local-fallback",
         reply: expect.stringContaining("Listing draft ready"),
         webAppUrl: "https://studio.example.com",
+        sentMessage: true,
         draft: expect.objectContaining({
           shootTypes: ["fashion"],
           featureIds: expect.arrayContaining(["natural-light", "cyclorama"])
         })
       })
     );
+    expect(telegramRequests[0].url).toBe("https://api.telegram.org/bottelegram-test-token/sendMessage");
+    expect(JSON.parse(String(telegramRequests[0].init?.body))).toEqual(
+      expect.objectContaining({
+        chat_id: 123,
+        text: expect.stringContaining("https://studio.example.com/#profile")
+      })
+    );
+
+    const drafts = await server.inject({
+      method: "GET",
+      url: "/owner/listing-drafts"
+    });
+
+    expect(drafts.statusCode).toBe(200);
+    expect(drafts.json().drafts).toEqual([
+      expect.objectContaining({
+        id: "telegram-draft-1",
+        source: "telegram",
+        transcript: "Soft daylight studio for fashion shoots with cyclorama and softboxes"
+      })
+    ]);
+  });
+
+  it("rejects Telegram webhooks with a mismatched secret token", async () => {
+    const server = buildServer({
+      config: {
+        telegramWebhookSecret: "expected-secret"
+      }
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/listing-draft",
+      headers: {
+        "x-telegram-bot-api-secret-token": "wrong-secret"
+      },
+      payload: {
+        message: {
+          chat: { id: 123 },
+          text: "Soft daylight studio"
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error).toBe("INVALID_TELEGRAM_SECRET");
   });
 
   it("searches studios by equipment", async () => {

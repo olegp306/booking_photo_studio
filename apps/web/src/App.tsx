@@ -27,6 +27,7 @@ import {
   type AmenityId,
   type EquipmentId,
   type FeatureId,
+  type ListingDraft,
   type ListingStatus,
   type OwnerAvailabilityBlock,
   type OwnerListingUpdate,
@@ -48,6 +49,7 @@ import {
   loadAvailability,
   loadCustomerBookings,
   loadLaunchReadiness,
+  loadOwnerListingDrafts,
   loadOwnerAvailabilityBlocks,
   loadOwnerBookings,
   loadSharedShortlist,
@@ -57,6 +59,7 @@ import {
   submitBookingRequest,
   updateOwnerListing,
   updateSharedShortlist,
+  type ImportedListingDraft,
   type LaunchReadiness
 } from "./api";
 
@@ -1855,6 +1858,7 @@ const readMediaFile = (file: File) =>
 const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps) => {
   const [aiDraft, setAiDraft] = useState("");
   const [aiDraftStatus, setAiDraftStatus] = useState("");
+  const [importedDrafts, setImportedDrafts] = useState<ImportedListingDraft[]>([]);
   const [tagline, setTagline] = useState(studio.tagline);
   const [description, setDescription] = useState(studio.description);
   const [priceFrom, setPriceFrom] = useState(String(studio.priceFrom));
@@ -1897,8 +1901,11 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setRules(studio.rules.join("\n"));
   }, [studio]);
 
-  const generateDraft = async () => {
-    const { draft, mode } = await generateListingDraft(aiDraft);
+  useEffect(() => {
+    loadOwnerListingDrafts().then(setImportedDrafts);
+  }, []);
+
+  const applyDraft = (draft: ListingDraft) => {
     setTagline(draft.tagline);
     setDescription(draft.description);
     if (draft.shootTypes.length) setShootTypes(draft.shootTypes);
@@ -1906,6 +1913,11 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     if (draft.equipmentIds.length) setEquipmentIds(draft.equipmentIds);
     if (draft.amenityIds.length) setAmenityIds(draft.amenityIds);
     if (draft.rules.length) setRules(draft.rules.join("\n"));
+  };
+
+  const generateDraft = async () => {
+    const { draft, mode } = await generateListingDraft(aiDraft);
+    applyDraft(draft);
     setAiDraftStatus(
       mode === "local-fallback"
         ? "Draft generated with local fallback. Add OPENAI_API_KEY to use live AI."
@@ -2160,6 +2172,34 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
         </button>
         {aiDraftStatus && <p className="booking-status">{aiDraftStatus}</p>}
       </article>
+
+      {importedDrafts.length > 0 && (
+        <article className="imported-drafts-panel" aria-label="Imported owner drafts">
+          <div>
+            <p className="eyebrow">Telegram imports</p>
+            <h2>Imported owner drafts</h2>
+            <p>Review drafts that came from the Telegram onboarding bot, then apply one to the listing form.</p>
+          </div>
+          {importedDrafts.map((importedDraft) => (
+            <div className="imported-draft-card" key={importedDraft.id}>
+              <div>
+                <strong>{importedDraft.draft.tagline}</strong>
+                <span>{importedDraft.mode === "openai" ? "OpenAI draft" : "Local fallback draft"}</span>
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  applyDraft(importedDraft.draft);
+                  setAiDraftStatus(`Imported ${importedDraft.id} from Telegram.`);
+                }}
+                type="button"
+              >
+                Use Telegram draft {importedDraft.id}
+              </button>
+            </div>
+          ))}
+        </article>
+      )}
 
       <form className="booking-form listing-form" onSubmit={submitListing}>
         <label>

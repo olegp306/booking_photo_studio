@@ -1093,6 +1093,42 @@ h2 {
   resize: vertical;
 }
 
+.imported-drafts-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.imported-drafts-panel p {
+  color: #6e6259;
+  line-height: 1.4;
+}
+
+.imported-draft-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  background: #fffaf4;
+  padding: 12px;
+}
+
+.imported-draft-card strong,
+.imported-draft-card span {
+  display: block;
+}
+
+.imported-draft-card span {
+  margin-top: 3px;
+  color: #6e6259;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .launch-readiness {
   gap: 14px;
 }

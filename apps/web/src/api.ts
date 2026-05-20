@@ -26,7 +26,8 @@ import {
 } from "@studio-market/shared";
 
 const API_BASE = "/api";
-export type AiDraftMode = "local-fallback" | "openai-ready";
+export type AiDraftMode = "local-fallback" | "openai";
+export type ImportedDraftMode = "local-fallback" | "openai";
 
 export interface LaunchServiceReadiness {
   configured: boolean;
@@ -46,6 +47,15 @@ export interface LaunchReadiness {
     stripe: LaunchServiceReadiness;
   };
   nextSteps: string[];
+}
+
+export interface ImportedListingDraft {
+  id: string;
+  source: "telegram";
+  transcript: string;
+  mode: ImportedDraftMode;
+  draft: ListingDraft;
+  createdAt: string;
 }
 
 const localShortlists = new Map<string, SharedShortlist>();
@@ -137,6 +147,17 @@ export const generateListingDraft = async (
       mode: "local-fallback",
       draft: draftListingFromTranscript(transcript)
     };
+  }
+};
+
+export const loadOwnerListingDrafts = async (): Promise<ImportedListingDraft[]> => {
+  try {
+    const response = await fetch(`${API_BASE}/owner/listing-drafts`);
+    if (!response.ok) throw new Error("Failed to load imported listing drafts");
+    const payload = (await response.json()) as { drafts: ImportedListingDraft[] };
+    return payload.drafts;
+  } catch {
+    return [];
   }
 };
 
