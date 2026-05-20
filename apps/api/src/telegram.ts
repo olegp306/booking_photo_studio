@@ -12,6 +12,15 @@ export interface TelegramDraftRecord {
   createdAt: string;
 }
 
+export interface TelegramWebhookSetupResult {
+  ok: true;
+  webhookUrl: string;
+  telegram: unknown;
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 export const extractTelegramText = (body: unknown) => {
   if (!body || typeof body !== "object") return "";
   const payload = body as {
@@ -64,4 +73,43 @@ export const sendTelegramListingDraftReply = async (
   });
 
   return response.ok;
+};
+
+export const registerTelegramListingDraftWebhook = async (
+  config: RuntimeConfig,
+  fetchImpl: FetchLike = fetch
+): Promise<TelegramWebhookSetupResult> => {
+  const publicAppUrl = config.publicAppUrl?.trim().replace(/\/$/, "");
+  const webhookUrl = `${publicAppUrl}/api/integrations/telegram/listing-draft`;
+  const body: {
+    url: string;
+    secret_token?: string;
+    allowed_updates: string[];
+  } = {
+    url: webhookUrl,
+    allowed_updates: ["message"]
+  };
+
+  if (config.telegramWebhookSecret?.trim()) {
+    body.secret_token = config.telegramWebhookSecret.trim();
+  }
+
+  const response = await fetchImpl(`https://api.telegram.org/bot${config.telegramBotToken}/setWebhook`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  const telegram = (await response.json()) as unknown;
+
+  if (!response.ok || (isObject(telegram) && telegram.ok === false)) {
+    throw new Error("Telegram rejected webhook setup");
+  }
+
+  return {
+    ok: true,
+    webhookUrl,
+    telegram
+  };
 };

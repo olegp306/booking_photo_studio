@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "./server";
 
@@ -207,6 +210,105 @@ describe("studio API", () => {
         transcript: "Soft daylight studio for fashion shoots with cyclorama and softboxes"
       })
     ]);
+  });
+
+  it("persists imported Telegram listing drafts across API restarts", async () => {
+    const localDataDir = mkdtempSync(join(tmpdir(), "studio-drafts-"));
+    const server = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+
+    await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/listing-draft",
+      payload: {
+        message: {
+          chat: { id: 456 },
+          text: "Industrial daylight studio for portraits with makeup station and softboxes"
+        }
+      }
+    });
+
+    const restartedServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const drafts = await restartedServer.inject({
+      method: "GET",
+      url: "/owner/listing-drafts"
+    });
+
+    expect(drafts.statusCode).toBe(200);
+    expect(drafts.json().drafts).toEqual([
+      expect.objectContaining({
+        id: "telegram-draft-1",
+        source: "telegram",
+        chatId: 456,
+        transcript: "Industrial daylight studio for portraits with makeup station and softboxes"
+      })
+    ]);
+  });
+
+  it("registers a Telegram listing draft webhook when launch config is ready", async () => {
+    const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
+    const server = buildServer({
+      config: {
+        publicAppUrl: "https://studio.example.com",
+        telegramBotToken: "telegram-test-token",
+        telegramWebhookSecret: "expected-secret"
+      },
+      fetch: async (url, init) => {
+        telegramRequests.push({ url: String(url), init });
+        return new Response(JSON.stringify({ ok: true, result: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/webhook"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        ok: true,
+        webhookUrl: "https://studio.example.com/api/integrations/telegram/listing-draft"
+      })
+    );
+    expect(telegramRequests[0].url).toBe("https://api.telegram.org/bottelegram-test-token/setWebhook");
+    expect(JSON.parse(String(telegramRequests[0].init?.body))).toEqual({
+      url: "https://studio.example.com/api/integrations/telegram/listing-draft",
+      secret_token: "expected-secret",
+      allowed_updates: ["message"]
+    });
+  });
+
+  it("reports missing Telegram webhook setup configuration", async () => {
+    const server = buildServer({
+      config: {
+        publicAppUrl: "",
+        telegramBotToken: ""
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/integrations/telegram/webhook"
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        error: "TELEGRAM_SETUP_NOT_READY",
+        missing: ["TELEGRAM_BOT_TOKEN", "PUBLIC_APP_URL"]
+      })
+    );
   });
 
   it("rejects Telegram webhooks with a mismatched secret token", async () => {

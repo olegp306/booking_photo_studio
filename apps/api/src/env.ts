@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 export interface RuntimeConfig {
   apiPort?: string;
   envFile: string;
+  localDataDir?: string;
   openaiApiKey?: string;
   openaiListingModel?: string;
   publicAppUrl?: string;
@@ -80,6 +81,7 @@ export const loadRuntimeConfig = (overrides: Partial<RuntimeConfig> = {}): Runti
   return {
     apiPort: source.API_PORT,
     envFile,
+    localDataDir: source.LOCAL_DATA_DIR,
     openaiApiKey: source.OPENAI_API_KEY,
     openaiListingModel: source.OPENAI_LISTING_MODEL,
     publicAppUrl: source.PUBLIC_APP_URL,

@@ -58,6 +58,11 @@ export interface ImportedListingDraft {
   createdAt: string;
 }
 
+export interface TelegramWebhookSetupResult {
+  ok: true;
+  webhookUrl: string;
+}
+
 const localShortlists = new Map<string, SharedShortlist>();
 const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
 let localShortlistCount = 0;
@@ -159,6 +164,20 @@ export const loadOwnerListingDrafts = async (): Promise<ImportedListingDraft[]> 
   } catch {
     return [];
   }
+};
+
+export const setupTelegramWebhook = async (): Promise<TelegramWebhookSetupResult> => {
+  const response = await fetch(`${API_BASE}/integrations/telegram/webhook`, {
+    method: "POST"
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    const missing = Array.isArray(payload.missing) ? payload.missing.join(", ") : "Telegram launch env";
+    throw new Error(`Add ${missing} before registering the webhook.`);
+  }
+
+  return payload as TelegramWebhookSetupResult;
 };
 
 export const loadStudios = async (filters: StudioSearchFilters): Promise<Studio[]> => {

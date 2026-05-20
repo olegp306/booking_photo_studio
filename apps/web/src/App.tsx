@@ -55,6 +55,7 @@ import {
   loadSharedShortlist,
   loadStudios,
   releaseOwnerAvailabilityBlock,
+  setupTelegramWebhook,
   submitBookingReview,
   submitBookingRequest,
   updateOwnerListing,
@@ -1379,6 +1380,13 @@ const OwnerDashboard = ({
 
 const OwnerLaunchReadiness = () => {
   const [readiness, setReadiness] = useState<LaunchReadiness>();
+  const [webhookStatus, setWebhookStatus] = useState<{
+    state: "idle" | "loading" | "ready" | "error";
+    message?: string;
+    webhookUrl?: string;
+  }>({
+    state: "idle"
+  });
 
   useEffect(() => {
     loadLaunchReadiness().then(setReadiness);
@@ -1387,6 +1395,27 @@ const OwnerLaunchReadiness = () => {
   const services = readiness
     ? [readiness.services.openai, readiness.services.telegram, readiness.services.publicAppUrl, readiness.services.stripe]
     : [];
+
+  const handleTelegramWebhookSetup = async () => {
+    setWebhookStatus({
+      state: "loading",
+      message: "Registering Telegram webhook..."
+    });
+
+    try {
+      const result = await setupTelegramWebhook();
+      setWebhookStatus({
+        state: "ready",
+        message: "Telegram webhook registered.",
+        webhookUrl: result.webhookUrl
+      });
+    } catch (error) {
+      setWebhookStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Telegram webhook setup failed."
+      });
+    }
+  };
 
   return (
     <section className="owner-list launch-readiness" aria-label="Launch readiness">
@@ -1432,6 +1461,33 @@ const OwnerLaunchReadiness = () => {
               {step}
             </span>
           ))}
+        </div>
+      </article>
+
+      <article className="listing-status-panel">
+        <div>
+          <p className="eyebrow">Telegram bot</p>
+          <h2>Owner import webhook</h2>
+          <p>
+            Register the bot webhook after filling TELEGRAM_BOT_TOKEN and PUBLIC_APP_URL. Telegram will send owner
+            studio notes to the API, and imported drafts will appear in the listing editor.
+          </p>
+        </div>
+        <div className="launch-next-steps">
+          <button
+            className="payment-button"
+            disabled={webhookStatus.state === "loading"}
+            onClick={handleTelegramWebhookSetup}
+            type="button"
+          >
+            Setup Telegram webhook
+          </button>
+          {webhookStatus.message ? (
+            <span className={webhookStatus.state === "error" ? "status-pill cancelled" : "status-pill confirmed"}>
+              {webhookStatus.message}
+            </span>
+          ) : null}
+          {webhookStatus.webhookUrl ? <code className="launch-webhook-url">{webhookStatus.webhookUrl}</code> : null}
         </div>
       </article>
     </section>

@@ -30,12 +30,13 @@ import {
 } from "@studio-market/shared";
 import { generateListingDraft, type FetchLike } from "./aiListing";
 import { getLaunchReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
+import { createListingDraftStore } from "./listingDraftStore";
 import {
   extractTelegramChatId,
   extractTelegramText,
   isTelegramSecretValid,
+  registerTelegramListingDraftWebhook,
   sendTelegramListingDraftReply,
-  type TelegramDraftRecord
 } from "./telegram";
 
 const toArray = <T extends string>(value: string | string[] | undefined): T[] | undefined => {
@@ -68,7 +69,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   const bookingIntents: BookingIntent[] = [];
   const shortlists: SharedShortlist[] = [];
   const availabilityBlocks: OwnerAvailabilityBlock[] = [];
-  const importedListingDrafts: TelegramDraftRecord[] = [];
+  const listingDraftStore = createListingDraftStore(config.localDataDir);
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
   const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
@@ -137,16 +138,14 @@ export const buildServer = (options: BuildServerOptions = {}) => {
 
     const { draft, mode } = await generateListingDraft(transcript, config, fetchImpl);
     const chatId = extractTelegramChatId(request.body);
-    const record: TelegramDraftRecord = {
-      id: `telegram-draft-${importedListingDrafts.length + 1}`,
+    const record = await listingDraftStore.add({
       source: "telegram",
       chatId,
       transcript,
       mode,
       draft,
       createdAt: new Date().toISOString()
-    };
-    importedListingDrafts.unshift(record);
+    });
     const sentMessage = await sendTelegramListingDraftReply(chatId, record, config, fetchImpl);
 
     return {
@@ -161,8 +160,32 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   });
 
   app.get("/owner/listing-drafts", async () => ({
-    drafts: importedListingDrafts
+    drafts: await listingDraftStore.list()
   }));
+
+  app.post("/integrations/telegram/webhook", async (_request, reply) => {
+    const missing = [
+      !config.telegramBotToken?.trim() && "TELEGRAM_BOT_TOKEN",
+      !config.publicAppUrl?.trim() && "PUBLIC_APP_URL"
+    ].filter(Boolean) as string[];
+
+    if (missing.length) {
+      return reply.code(400).send({
+        error: "TELEGRAM_SETUP_NOT_READY",
+        missing,
+        message: `Fill ${missing.join(" and ")} before registering the Telegram webhook.`
+      });
+    }
+
+    try {
+      return await registerTelegramListingDraftWebhook(config, fetchImpl);
+    } catch (error) {
+      return reply.code(502).send({
+        error: "TELEGRAM_WEBHOOK_SETUP_FAILED",
+        message: error instanceof Error ? error.message : "Telegram webhook setup failed"
+      });
+    }
+  });
 
   app.get<{
     Querystring: {

@@ -1196,6 +1196,18 @@ h2 {
   line-height: 1.35;
 }
 
+.launch-webhook-url {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  background: #f6efe7;
+  color: #3b332d;
+  padding: 9px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .detected-filters {
   display: grid;
   gap: 10px;

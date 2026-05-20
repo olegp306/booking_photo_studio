@@ -46,12 +46,15 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - OpenAI-backed listing draft generation through the Responses API when `OPENAI_API_KEY` is set.
 - Telegram owner onboarding webhook that stores imported listing drafts and replies with an owner dashboard link.
 - Owner listing editor import panel for applying Telegram drafts to the public studio profile.
+- Imported Telegram owner drafts can persist to local JSON storage through `LOCAL_DATA_DIR`.
+- Launch readiness can register the Telegram owner bot webhook from the UI when bot and public URL env values are present.
 
 ## Local Launch Env
 
 - Fill local secrets in `../../.env.local`; the committed template is `../../.env.example`.
 - Required for the live Telegram and AI pass: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `PUBLIC_APP_URL`.
 - Optional but recommended for bot webhook hardening: `TELEGRAM_WEBHOOK_SECRET`.
+- Optional local persistence path for imported owner drafts: `LOCAL_DATA_DIR`.
 - Optional until production payments are wired: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `OPENAI_LISTING_MODEL`.
 
 ## Project Docs
@@ -64,12 +67,11 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
-3. Add persistent storage for imported owner drafts so Telegram onboarding survives server restarts.
-4. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
-5. Add Telegram setup tooling for registering the webhook URL and validating the bot connection from the UI.
-6. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
-7. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
-8. Add authentication and durable database storage for shared shortlists, comments, and decisions.
-9. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
-10. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
-11. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.
+3. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
+4. Connect Telegram Mini App entry points for browsing imported drafts and opening the web editor.
+5. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
+6. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
+7. Add authentication and durable database storage for shared shortlists, comments, and decisions.
+8. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
+9. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
+10. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

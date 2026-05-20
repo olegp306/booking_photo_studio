@@ -632,6 +632,72 @@ describe("App", () => {
     expect(screen.getByText("Missing TELEGRAM_BOT_TOKEN")).toBeInTheDocument();
   });
 
+  it("lets owners start Telegram webhook setup from launch readiness", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/readiness")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            envFile: ".env.local",
+            services: {
+              openai: {
+                configured: false,
+                env: "OPENAI_API_KEY",
+                label: "OpenAI listing assistant",
+                missingLabel: "Missing OPENAI_API_KEY",
+                readyLabel: "OPENAI_API_KEY configured"
+              },
+              telegram: {
+                configured: true,
+                env: "TELEGRAM_BOT_TOKEN",
+                label: "Telegram owner bot",
+                missingLabel: "Missing TELEGRAM_BOT_TOKEN",
+                readyLabel: "TELEGRAM_BOT_TOKEN configured"
+              },
+              publicAppUrl: {
+                configured: true,
+                env: "PUBLIC_APP_URL",
+                label: "Public app URL",
+                missingLabel: "Missing PUBLIC_APP_URL",
+                readyLabel: "PUBLIC_APP_URL configured"
+              },
+              stripe: {
+                configured: false,
+                env: "STRIPE_SECRET_KEY",
+                label: "Stripe payments",
+                missingLabel: "Missing STRIPE_SECRET_KEY",
+                readyLabel: "STRIPE_SECRET_KEY configured"
+              }
+            },
+            nextSteps: []
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/integrations/telegram/webhook")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            webhookUrl: "https://studio.example.com/api/integrations/telegram/listing-draft"
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Unexpected request");
+    });
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.click(await screen.findByRole("button", { name: "Setup Telegram webhook" }));
+
+    expect(await screen.findByText("Telegram webhook registered.")).toBeInTheDocument();
+    expect(screen.getByText("https://studio.example.com/api/integrations/telegram/listing-draft")).toBeInTheDocument();
+  });
+
   it("lets owners apply imported Telegram listing drafts", async () => {
     const user = userEvent.setup();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
