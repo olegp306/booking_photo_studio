@@ -48,6 +48,38 @@ describe("App", () => {
     expect(screen.getByText("Check availability")).toBeInTheDocument();
   });
 
+  it("opens a studio detail from a shared studio link", async () => {
+    window.location.hash = "#studio/studio-lumen-karlin";
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Studio Lumen Karlin" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Main Daylight Room" })).toBeInTheDocument();
+  });
+
+  it("responds to a shared studio hash while the app is already open", async () => {
+    render(<App />);
+
+    expect(await screen.findByText("Studio Lumen Karlin")).toBeInTheDocument();
+    window.location.hash = "#studio/studio-lumen-karlin";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+    expect(await screen.findByRole("heading", { name: "Studio Lumen Karlin" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Main Daylight Room" })).toBeInTheDocument();
+  });
+
+  it("shows a shareable studio link and message", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Studio Lumen Karlin" }));
+    await user.click(screen.getByRole("button", { name: "Share studio" }));
+
+    expect(await screen.findByRole("heading", { name: "Share Studio Lumen Karlin" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("http://localhost:3000/#studio/studio-lumen-karlin")).toBeInTheDocument();
+    expect(screen.getByText("Take a look at Studio Lumen Karlin in Karlin. From CZK 1,300 / hour.")).toBeInTheDocument();
+  });
+
   it("shows availability slots on studio detail", async () => {
     const user = userEvent.setup();
     render(<App />);

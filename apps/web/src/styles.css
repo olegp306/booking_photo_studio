@@ -320,6 +320,41 @@ h2 {
   padding: 20px 18px 110px;
 }
 
+.share-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.share-panel label {
+  display: grid;
+  gap: 6px;
+  color: #5d5149;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.share-panel input {
+  width: 100%;
+  border: 1px solid #dccfc0;
+  border-radius: 8px;
+  background: #fffaf4;
+  color: #191714;
+  font: inherit;
+  font-weight: 700;
+  padding: 12px;
+}
+
+.share-panel p {
+  margin-bottom: 0;
+  color: #6e6259;
+  line-height: 1.4;
+}
+
 .detail-title h1 {
   font-size: 26px;
 }

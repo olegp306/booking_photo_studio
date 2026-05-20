@@ -77,6 +77,11 @@ const initialViewFromHash = (): AppView => {
   return "explore";
 };
 
+const studioSlugFromHash = () => {
+  const prefix = "#studio/";
+  return window.location.hash.startsWith(prefix) ? window.location.hash.slice(prefix.length) : undefined;
+};
+
 export const App = () => {
   const [studios, setStudios] = useState<Studio[]>([]);
   const [activeShootType, setActiveShootType] = useState<ShootType | undefined>();
@@ -87,6 +92,7 @@ export const App = () => {
   const [ownerBookings, setOwnerBookings] = useState<BookingIntent[]>([]);
   const [customerBookings, setCustomerBookings] = useState<BookingIntent[]>([]);
   const [lastGuestEmail, setLastGuestEmail] = useState<string | undefined>();
+  const [hashVersion, setHashVersion] = useState(0);
 
   const filters: StudioSearchFilters = useMemo(
     () => ({
@@ -100,6 +106,23 @@ export const App = () => {
   useEffect(() => {
     loadStudios(filters).then(setStudios);
   }, [filters]);
+
+  useEffect(() => {
+    const handleHashChange = () => setHashVersion((current) => current + 1);
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    const sharedStudioSlug = studioSlugFromHash();
+    if (!sharedStudioSlug || selectedStudio) return;
+
+    const sharedStudio = studios.find((studio) => studio.slug === sharedStudioSlug);
+    if (sharedStudio) {
+      setSelectedStudio(sharedStudio);
+      setView("explore");
+    }
+  }, [hashVersion, selectedStudio, studios]);
 
   useEffect(() => {
     if (view === "host") {
@@ -134,12 +157,23 @@ export const App = () => {
     });
   };
 
+  const openStudio = (studio: Studio) => {
+    window.location.hash = `studio/${studio.slug}`;
+    setSelectedStudio(studio);
+    setView("explore");
+  };
+
+  const closeStudio = () => {
+    window.location.hash = "explore";
+    setSelectedStudio(undefined);
+  };
+
   if (selectedStudio) {
     return (
       <StudioDetail
         studio={selectedStudio}
         isSaved={saved.has(selectedStudio.slug)}
-        onBack={() => setSelectedStudio(undefined)}
+        onBack={closeStudio}
         onBookingCreated={(booking) => {
           setLastGuestEmail(booking.guestEmail);
           setOwnerBookings((current) => [booking, ...current.filter((item) => item.id !== booking.id)]);
@@ -171,7 +205,7 @@ export const App = () => {
         onBackToExplore={() => setView("explore")}
         onOpenBookings={() => setView("bookings")}
         onOpenHost={() => setView("host")}
-        onOpenStudio={setSelectedStudio}
+        onOpenStudio={openStudio}
         onSave={toggleSaved}
       />
     );
@@ -265,7 +299,7 @@ export const App = () => {
             key={studio.id}
             studio={studio}
             isSaved={saved.has(studio.slug)}
-            onOpen={() => setSelectedStudio(studio)}
+            onOpen={() => openStudio(studio)}
             onSave={() => toggleSaved(studio.slug)}
           />
         ))}
@@ -348,11 +382,17 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
   const visibleAmenities = studio.amenityIds.slice(0, 5);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | undefined>();
+  const [shareOpen, setShareOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [shootNotes, setShootNotes] = useState("");
   const [booking, setBooking] = useState<BookingIntent | undefined>();
   const bookingDate = "2026-06-12";
+  const shareUrl = `${window.location.origin}/#studio/${studio.slug}`;
+  const shareMessage = `Take a look at ${studio.name} in ${studio.district}. From ${money(
+    studio.priceFrom,
+    studio.currency
+  )} / hour.`;
 
   useEffect(() => {
     loadAvailability(studio, bookingDate).then((availability) => {
@@ -389,7 +429,11 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
             <ChevronLeft size={20} />
           </button>
           <div>
-            <button className="icon-button solid" aria-label="Share studio">
+            <button
+              className="icon-button solid"
+              aria-label="Share studio"
+              onClick={() => setShareOpen((current) => !current)}
+            >
               <Share2 size={18} />
             </button>
             <button className={`icon-button solid ${isSaved ? "saved" : ""}`} onClick={onSave} aria-label="Save studio">
@@ -400,6 +444,20 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
       </section>
 
       <section className="detail-content">
+        {shareOpen && (
+          <section className="share-panel" aria-label="Studio sharing">
+            <div>
+              <p className="eyebrow">Share link</p>
+              <h2>Share {studio.name}</h2>
+            </div>
+            <label>
+              Studio link
+              <input readOnly value={shareUrl} />
+            </label>
+            <p>{shareMessage}</p>
+          </section>
+        )}
+
         <div className="detail-title">
           <div>
             <p className="eyebrow">{studio.addressHint}</p>
