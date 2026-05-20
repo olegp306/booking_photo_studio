@@ -760,6 +760,58 @@ describe("studio API", () => {
     );
   });
 
+  it("persists owner availability blocks across API restarts", async () => {
+    const localDataDir = mkdtempSync(join(tmpdir(), "studio-state-availability-"));
+    const firstServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+
+    const block = await firstServer.inject({
+      method: "POST",
+      url: "/owner/availability-blocks",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-main",
+        date: "2026-06-12",
+        startTime: "09:00",
+        reason: "Private client hold"
+      }
+    });
+    expect(block.statusCode).toBe(201);
+
+    const restartedServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const blocks = await restartedServer.inject({
+      method: "GET",
+      url: "/owner/availability-blocks?studioSlug=studio-lumen-karlin"
+    });
+    const availability = await restartedServer.inject({
+      method: "GET",
+      url: "/studios/studio-lumen-karlin/availability?date=2026-06-12"
+    });
+
+    expect(blocks.json().blocks).toEqual([
+      expect.objectContaining({
+        id: "block-1",
+        reason: "Private client hold"
+      })
+    ]);
+    expect(
+      availability
+        .json()
+        .availability.slots.find((slot: { roomId: string; startTime: string }) => slot.roomId === "lumen-main" && slot.startTime === "09:00")
+    ).toEqual(
+      expect.objectContaining({
+        available: false
+      })
+    );
+  });
+
   it("creates booking requests with hybrid status logic", async () => {
     const server = buildServer();
     const response = await server.inject({
@@ -825,6 +877,58 @@ describe("studio API", () => {
 
     expect(approved.statusCode).toBe(200);
     expect(approved.json().booking.status).toBe("awaiting_payment");
+  });
+
+  it("persists booking requests and status updates across API restarts", async () => {
+    const localDataDir = mkdtempSync(join(tmpdir(), "studio-state-bookings-"));
+    const firstServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const created = await firstServer.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: "studio-lumen-karlin",
+        roomId: "lumen-product",
+        date: "2026-06-12",
+        startTime: "11:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        shootType: "product",
+        message: "Need product table"
+      }
+    });
+    const bookingId = created.json().booking.id;
+    await firstServer.inject({
+      method: "PATCH",
+      url: `/owner/bookings/${bookingId}`,
+      payload: {
+        decision: "approve",
+        ownerNote: "Approved for the product corner."
+      }
+    });
+
+    const restartedServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const loaded = await restartedServer.inject({
+      method: "GET",
+      url: "/owner/bookings?studioSlug=studio-lumen-karlin"
+    });
+
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().bookings).toEqual([
+      expect.objectContaining({
+        id: bookingId,
+        status: "awaiting_payment",
+        ownerNote: "Approved for the product corner."
+      })
+    ]);
   });
 
   it("lets owners update listing basics", async () => {
@@ -1196,5 +1300,57 @@ describe("studio API", () => {
     });
 
     expect(loaded.json().shortlist.items[0].note).toBe("Client prefers daylight.");
+  });
+
+  it("persists shared shortlist updates across API restarts", async () => {
+    const localDataDir = mkdtempSync(join(tmpdir(), "studio-state-shortlists-"));
+    const firstServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const created = await firstServer.inject({
+      method: "POST",
+      url: "/shortlists",
+      payload: {
+        studioSlugs: ["studio-lumen-karlin", "atelier-rosa-vinohrady"]
+      }
+    });
+    const shortlistId = created.json().shortlist.id;
+    await firstServer.inject({
+      method: "PATCH",
+      url: `/shortlists/${shortlistId}`,
+      payload: {
+        items: [
+          {
+            studioSlug: "studio-lumen-karlin",
+            decision: "favourite",
+            note: "Client likes the clean daylight room."
+          }
+        ]
+      }
+    });
+
+    const restartedServer = buildServer({
+      config: {
+        localDataDir
+      }
+    });
+    const loaded = await restartedServer.inject({
+      method: "GET",
+      url: `/shortlists/${shortlistId}`
+    });
+
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().shortlist.items).toEqual([
+      {
+        studioSlug: "studio-lumen-karlin",
+        decision: "favourite",
+        note: "Client likes the clean daylight room."
+      },
+      {
+        studioSlug: "atelier-rosa-vinohrady"
+      }
+    ]);
   });
 });

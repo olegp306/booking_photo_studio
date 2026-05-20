@@ -31,6 +31,7 @@ import {
 import { generateListingDraft, type FetchLike } from "./aiListing";
 import { suggestMediaDetails } from "./aiMedia";
 import { getLaunchReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
+import { createJsonResourceStore } from "./jsonResourceStore";
 import { createListingDraftStore } from "./listingDraftStore";
 import {
   extractTelegramChatId,
@@ -67,9 +68,9 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     props: [...studio.props],
     rules: [...studio.rules]
   }));
-  const bookingIntents: BookingIntent[] = [];
-  const shortlists: SharedShortlist[] = [];
-  const availabilityBlocks: OwnerAvailabilityBlock[] = [];
+  const bookingIntentStore = createJsonResourceStore<BookingIntent>(config.localDataDir, "booking-intents.json");
+  const shortlistStore = createJsonResourceStore<SharedShortlist>(config.localDataDir, "shared-shortlists.json");
+  const availabilityBlockStore = createJsonResourceStore<OwnerAvailabilityBlock>(config.localDataDir, "availability-blocks.json");
   const listingDraftStore = createListingDraftStore(config.localDataDir);
   const reviews: StudioReview[] = [];
   let reviewCount = 0;
@@ -297,6 +298,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     const durationHours = request.query.durationHours ? Number(request.query.durationHours) : 2;
 
     const availability = getAvailabilityForStudio(studio, date, durationHours);
+    const availabilityBlocks = await availabilityBlockStore.list();
 
     return {
       availability: {
@@ -313,11 +315,15 @@ export const buildServer = (options: BuildServerOptions = {}) => {
 
   app.get<{
     Querystring: { studioSlug?: string };
-  }>("/owner/availability-blocks", async (request) => ({
-    blocks: request.query.studioSlug
-      ? availabilityBlocks.filter((block) => block.studioSlug === request.query.studioSlug)
-      : availabilityBlocks
-  }));
+  }>("/owner/availability-blocks", async (request) => {
+    const availabilityBlocks = await availabilityBlockStore.list();
+
+    return {
+      blocks: request.query.studioSlug
+        ? availabilityBlocks.filter((block) => block.studioSlug === request.query.studioSlug)
+        : availabilityBlocks
+    };
+  });
 
   app.post<{
     Body: Omit<OwnerAvailabilityBlock, "id">;
@@ -339,6 +345,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
+    const availabilityBlocks = await availabilityBlockStore.list();
     const block: OwnerAvailabilityBlock = {
       id: `block-${availabilityBlocks.length + 1}`,
       studioSlug: request.body.studioSlug,
@@ -348,7 +355,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       kind: request.body.kind ?? "hold",
       reason: request.body.reason
     };
-    availabilityBlocks.push(block);
+    await availabilityBlockStore.setAll([...availabilityBlocks, block]);
 
     return reply.code(201).send({
       block
@@ -356,6 +363,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   });
 
   app.delete<{ Params: { blockId: string } }>("/owner/availability-blocks/:blockId", async (request, reply) => {
+    const availabilityBlocks = await availabilityBlockStore.list();
     const blockIndex = availabilityBlocks.findIndex((block) => block.id === request.params.blockId);
 
     if (blockIndex === -1) {
@@ -365,7 +373,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
-    availabilityBlocks.splice(blockIndex, 1);
+    await availabilityBlockStore.setAll(availabilityBlocks.filter((_, index) => index !== blockIndex));
 
     return {
       released: true
@@ -386,7 +394,8 @@ export const buildServer = (options: BuildServerOptions = {}) => {
 
     try {
       const booking = createBookingIntent(studio, request.body);
-      bookingIntents.push(booking);
+      const bookingIntents = await bookingIntentStore.list();
+      await bookingIntentStore.setAll([...bookingIntents, booking]);
 
       return reply.code(201).send({
         booking
@@ -404,6 +413,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       guestEmail?: string;
     };
   }>("/bookings", async (request) => {
+    const bookingIntents = await bookingIntentStore.list();
     const bookings = request.query.guestEmail
       ? bookingIntents.filter((booking) => booking.guestEmail === request.query.guestEmail)
       : bookingIntents;
@@ -417,6 +427,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     Params: { bookingId: string };
     Body: StudioReviewRequest;
   }>("/bookings/:bookingId/review", async (request, reply) => {
+    const bookingIntents = await bookingIntentStore.list();
     const booking = bookingIntents.find((candidate) => candidate.id === request.params.bookingId);
 
     if (!booking) {
@@ -478,6 +489,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.post<{
     Params: { bookingId: string };
   }>("/bookings/:bookingId/payment", async (request, reply) => {
+    const bookingIntents = await bookingIntentStore.list();
     const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
 
     if (bookingIndex === -1) {
@@ -490,6 +502,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     try {
       const booking = markBookingPaid(bookingIntents[bookingIndex]);
       bookingIntents[bookingIndex] = booking;
+      await bookingIntentStore.setAll(bookingIntents);
 
       return {
         booking
@@ -507,6 +520,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       studioSlug?: string;
     };
   }>("/owner/bookings", async (request) => {
+    const bookingIntents = await bookingIntentStore.list();
     const bookings = request.query.studioSlug
       ? bookingIntents.filter((booking) => booking.studioSlug === request.query.studioSlug)
       : bookingIntents;
@@ -520,6 +534,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     Params: { bookingId: string };
     Body: { decision: OwnerBookingDecision; ownerNote?: string };
   }>("/owner/bookings/:bookingId", async (request, reply) => {
+    const bookingIntents = await bookingIntentStore.list();
     const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
 
     if (bookingIndex === -1) {
@@ -536,6 +551,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
         request.body.ownerNote
       );
       bookingIntents[bookingIndex] = booking;
+      await bookingIntentStore.setAll(bookingIntents);
 
       return {
         booking
@@ -551,6 +567,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.post<{
     Params: { bookingId: string };
   }>("/owner/bookings/:bookingId/complete", async (request, reply) => {
+    const bookingIntents = await bookingIntentStore.list();
     const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
 
     if (bookingIndex === -1) {
@@ -563,6 +580,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     try {
       const booking = markBookingCompleted(bookingIntents[bookingIndex]);
       bookingIntents[bookingIndex] = booking;
+      await bookingIntentStore.setAll(bookingIntents);
 
       return {
         booking
@@ -659,13 +677,14 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       studioSlug,
       ...request.body.items?.find((item) => item.studioSlug === studioSlug)
     }));
+    const shortlists = await shortlistStore.list();
     const shortlist: SharedShortlist = {
       id: `shortlist-${shortlists.length + 1}`,
       studioSlugs,
       items,
       createdAt: new Date().toISOString()
     };
-    shortlists.push(shortlist);
+    await shortlistStore.setAll([...shortlists, shortlist]);
 
     return reply.code(201).send({
       shortlist
@@ -673,6 +692,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   });
 
   app.get<{ Params: { shortlistId: string } }>("/shortlists/:shortlistId", async (request, reply) => {
+    const shortlists = await shortlistStore.list();
     const shortlist = shortlists.find((item) => item.id === request.params.shortlistId);
 
     if (!shortlist) {
@@ -693,6 +713,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       items: SharedShortlistItem[];
     };
   }>("/shortlists/:shortlistId", async (request, reply) => {
+    const shortlists = await shortlistStore.list();
     const shortlistIndex = shortlists.findIndex((item) => item.id === request.params.shortlistId);
 
     if (shortlistIndex === -1) {
@@ -719,6 +740,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       }))
     };
     shortlists[shortlistIndex] = updated;
+    await shortlistStore.setAll(shortlists);
 
     return {
       shortlist: updated
