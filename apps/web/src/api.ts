@@ -20,8 +20,10 @@ import {
   type SharedShortlistItem,
   type Studio,
   type StudioAvailability,
+  type StudioImage,
   type StudioReview,
   type StudioReviewRequest,
+  type StudioRoom,
   type StudioSearchFilters
 } from "@studio-market/shared";
 
@@ -63,6 +65,15 @@ export interface ImportedListingDraft {
 export interface TelegramWebhookSetupResult {
   ok: true;
   webhookUrl: string;
+}
+
+export interface MediaSuggestionResult {
+  mode: AiDraftMode;
+  suggestion: {
+    kind: StudioImage["kind"];
+    roomId?: string;
+    reason: string;
+  };
 }
 
 const localShortlists = new Map<string, SharedShortlist>();
@@ -155,6 +166,27 @@ export const generateListingDraft = async (
       draft: draftListingFromTranscript(transcript)
     };
   }
+};
+
+export const suggestMediaDetails = async (
+  caption: string,
+  imageUrl: string,
+  rooms: Array<Pick<StudioRoom, "id" | "name">>
+): Promise<MediaSuggestionResult> => {
+  const response = await fetch(`${API_BASE}/ai/media-suggestion`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      caption,
+      imageUrl,
+      rooms
+    })
+  });
+
+  if (!response.ok) throw new Error("Failed to suggest media details");
+  return (await response.json()) as MediaSuggestionResult;
 };
 
 export const loadOwnerListingDrafts = async (): Promise<ImportedListingDraft[]> => {

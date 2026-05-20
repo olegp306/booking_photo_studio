@@ -873,9 +873,54 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Media caption"), "Main daylight room cyclorama angle with softboxes");
     await user.click(screen.getByRole("button", { name: "Suggest media details" }));
 
+    expect(await screen.findByText("AI suggestion: room media for Main Daylight Room.")).toBeInTheDocument();
     expect(screen.getByLabelText("Media category")).toHaveValue("room");
     expect(screen.getByLabelText("Media room")).toHaveValue("lumen-main");
-    expect(screen.getByText("AI suggestion: room media for Main Daylight Room.")).toBeInTheDocument();
+  });
+
+  it("applies API-powered media suggestions from image analysis", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/ai/media-suggestion")) {
+        return new Response(
+          JSON.stringify({
+            mode: "openai",
+            suggestion: {
+              kind: "equipment",
+              reason: "Softbox kit visible in the uploaded image."
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.type(screen.getByLabelText("Media URL"), "https://example.com/softbox-kit.jpg");
+    await user.type(screen.getByLabelText("Media caption"), "Lighting kit detail");
+    await user.click(screen.getByRole("button", { name: "Suggest media details" }));
+
+    expect(await screen.findByText("AI suggestion: Equipment and props. Softbox kit visible in the uploaded image.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Media category")).toHaveValue("equipment");
+    expect(screen.getByLabelText("Media room")).toHaveValue("");
+  });
+
+  it("keeps local media suggestions focused on equipment cues in hosted image URLs", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Listing" }));
+    await user.type(screen.getByLabelText("Media URL"), "https://example.com/softbox-kit.jpg");
+    await user.type(screen.getByLabelText("Media caption"), "Lighting kit detail with softbox and stands");
+    await user.click(screen.getByRole("button", { name: "Suggest media details" }));
+
+    expect(await screen.findByText("AI suggestion: equipment and props media.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Media category")).toHaveValue("equipment");
   });
 
   it("lets owners promote and reorder listing media", async () => {

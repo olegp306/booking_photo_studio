@@ -29,6 +29,7 @@ import {
   type StudioSearchFilters
 } from "@studio-market/shared";
 import { generateListingDraft, type FetchLike } from "./aiListing";
+import { suggestMediaDetails } from "./aiMedia";
 import { getLaunchReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
 import { createListingDraftStore } from "./listingDraftStore";
 import {
@@ -111,6 +112,34 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     }
 
     return generateListingDraft(transcript, config, fetchImpl);
+  });
+
+  app.post<{
+    Body: {
+      caption?: string;
+      imageUrl?: string;
+      rooms?: Array<{ id: string; name: string }>;
+    };
+  }>("/ai/media-suggestion", async (request, reply) => {
+    const caption = request.body.caption?.trim();
+    const imageUrl = request.body.imageUrl?.trim();
+
+    if (!caption && !imageUrl) {
+      return reply.code(400).send({
+        error: "INVALID_MEDIA_SUGGESTION",
+        message: "Caption or imageUrl is required"
+      });
+    }
+
+    return suggestMediaDetails(
+      {
+        caption,
+        imageUrl,
+        rooms: request.body.rooms ?? []
+      },
+      config,
+      fetchImpl
+    );
   });
 
   app.post<{

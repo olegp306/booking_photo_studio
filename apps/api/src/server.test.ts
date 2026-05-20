@@ -148,6 +148,122 @@ describe("studio API", () => {
     );
   });
 
+  it("suggests media details with a local fallback", async () => {
+    const server = buildServer({
+      config: {
+        openaiApiKey: ""
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/ai/media-suggestion",
+      payload: {
+        caption: "Main Daylight Room cyclorama angle with softboxes",
+        imageUrl: "data:image/jpeg;base64,Y3ljbG9yYW1h",
+        rooms: [
+          { id: "lumen-main", name: "Main Daylight Room" },
+          { id: "lumen-product", name: "Product Corner" }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        mode: "local-fallback",
+        suggestion: expect.objectContaining({
+          kind: "room",
+          roomId: "lumen-main",
+          reason: "Matched the media notes to Main Daylight Room."
+        })
+      })
+    );
+  });
+
+  it("prioritizes equipment cues over generic image hostnames in media fallback", async () => {
+    const server = buildServer({
+      config: {
+        openaiApiKey: ""
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/ai/media-suggestion",
+      payload: {
+        caption: "Lighting kit detail with softbox and stands",
+        imageUrl: "https://example.com/softbox-kit.jpg",
+        rooms: [{ id: "lumen-main", name: "Main Daylight Room" }]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        mode: "local-fallback",
+        suggestion: expect.objectContaining({
+          kind: "equipment"
+        })
+      })
+    );
+  });
+
+  it("uses OpenAI vision for media suggestions when configured", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const server = buildServer({
+      config: {
+        openaiApiKey: "sk-test-openai",
+        openaiListingModel: "gpt-test-media"
+      },
+      fetch: async (url, init) => {
+        requests.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              kind: "equipment",
+              roomId: null,
+              reason: "Softboxes and grip gear are the main subject."
+            })
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/ai/media-suggestion",
+      payload: {
+        caption: "Lighting kit detail",
+        imageUrl: "https://example.com/softboxes.jpg",
+        rooms: [{ id: "lumen-main", name: "Main Daylight Room" }]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        mode: "openai",
+        suggestion: expect.objectContaining({
+          kind: "equipment",
+          reason: "Softboxes and grip gear are the main subject."
+        })
+      })
+    );
+    expect(requests[0].url).toBe("https://api.openai.com/v1/responses");
+    expect(requests[0].init?.headers).toEqual(
+      expect.objectContaining({
+        Authorization: "Bearer sk-test-openai"
+      })
+    );
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual(
+      expect.objectContaining({
+        model: "gpt-test-media"
+      })
+    );
+  });
+
   it("accepts Telegram owner bot listing draft webhooks", async () => {
     const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({

@@ -37,6 +37,7 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 - Owner media ordering controls with hero promotion for mobile-friendly gallery curation.
 - Owner local media upload previews with filename-based captions.
 - AI media detail suggestions for category and room assignment.
+- AI media suggestions now call the backend image/caption analysis flow with OpenAI vision when `OPENAI_API_KEY` is set, and fall back locally when it is not.
 - Customer booking receipts after payment capture.
 - Review counts surfaced on studio cards and detail pages.
 - Booking message threads shared between customers and studio owners.
@@ -70,9 +71,8 @@ The first product shape is intentionally close to familiar Airbnb marketplace pa
 1. Replace in-memory booking state with persistent storage.
 2. Add authentication and role-aware sessions for customers, photographers, studio owners, and admins.
 3. Expand the owner listing editor with production media storage and drag-and-drop media ordering.
-4. Connect AI media helper flows to uploaded image analysis and OpenAI vision.
-5. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
-6. Add authentication and durable database storage for shared shortlists, comments, and decisions.
-7. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
-8. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
-9. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.
+4. Expand owner calendar management with drag-friendly editing and database-backed calendar state.
+5. Add authentication and durable database storage for shared shortlists, comments, and decisions.
+6. Integrate production Stripe Checkout, webhooks, and a future owner payout model.
+7. Add post-booking lifecycle: durable messages, downloadable receipt files, and full review history.
+8. Add AI matching later as a guided search layer for shoot mood, light, interiors, and equipment needs.

@@ -59,9 +59,11 @@ import {
   setupTelegramWebhook,
   submitBookingReview,
   submitBookingRequest,
+  suggestMediaDetails as suggestMediaDetailsFromApi,
   updateOwnerListing,
   updateSharedShortlist,
   type ImportedListingDraft,
+  type MediaSuggestionResult,
   type LaunchReadiness
 } from "./api";
 
@@ -2133,7 +2135,7 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
     setMediaSuggestion(`Uploaded ${file.name}.`);
   };
 
-  const suggestMediaDetails = () => {
+  const suggestMediaDetailsLocally = () => {
     const note = `${mediaCaption} ${mediaUrl}`.toLowerCase();
     const matchingRoom =
       rooms.find((room) => note.includes(room.name.toLowerCase())) ??
@@ -2160,13 +2162,6 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       return;
     }
 
-    if (/example|shoot|portrait|fashion|editorial|campaign|lookbook/.test(note)) {
-      setMediaKind("example");
-      setMediaRoomId("");
-      setMediaSuggestion("AI suggestion: example shoot media for client inspiration.");
-      return;
-    }
-
     if (/equipment|softbox|strobe|stand|c-stand|prop|backdrop/.test(note)) {
       setMediaKind("equipment");
       setMediaRoomId("");
@@ -2174,9 +2169,42 @@ const OwnerListingEditor = ({ studio, onUpdateListing }: OwnerListingEditorProps
       return;
     }
 
+    if (/example|shoot|portrait|fashion|editorial|campaign|lookbook/.test(note)) {
+      setMediaKind("example");
+      setMediaRoomId("");
+      setMediaSuggestion("AI suggestion: example shoot media for client inspiration.");
+      return;
+    }
+
     setMediaKind("room");
     setMediaRoomId(rooms[0]?.id ?? "");
     setMediaSuggestion("AI suggestion: room media. Review the room before saving.");
+  };
+
+  const applyMediaSuggestion = (suggestion: MediaSuggestionResult["suggestion"]) => {
+    setMediaKind(suggestion.kind);
+    const matchingRoom = suggestion.roomId ? rooms.find((room) => room.id === suggestion.roomId) : undefined;
+    setMediaRoomId(suggestion.kind === "room" ? matchingRoom?.id ?? rooms[0]?.id ?? "" : "");
+    const suggestionLabel =
+      suggestion.kind === "room" && matchingRoom
+        ? `room media for ${matchingRoom.name}`
+        : mediaKindLabels[suggestion.kind];
+    setMediaSuggestion(`AI suggestion: ${suggestionLabel}. ${suggestion.reason}`);
+  };
+
+  const suggestMediaDetails = async () => {
+    setMediaSuggestion("Analyzing media...");
+
+    try {
+      const result = await suggestMediaDetailsFromApi(
+        mediaCaption,
+        mediaUrl,
+        rooms.map(({ id, name }) => ({ id, name }))
+      );
+      applyMediaSuggestion(result.suggestion);
+    } catch {
+      suggestMediaDetailsLocally();
+    }
   };
 
   const addMedia = () => {
