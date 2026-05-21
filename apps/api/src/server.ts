@@ -44,17 +44,19 @@ import {
   type UserSession
 } from "@studio-market/shared";
 import { generateListingDraft, type FetchLike } from "./aiListing";
-import { suggestMediaDetails } from "./aiMedia";
+import { extractOwnerMediaFacts, suggestMediaDetails } from "./aiMedia";
 import { getLaunchReadiness, getProductionOnboardingReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
 import { createJsonResourceStore } from "./jsonResourceStore";
 import { createListingDraftStore } from "./listingDraftStore";
 import {
   createOwnerSessionToken,
   createOtpExpiry,
+  createSignedActionToken,
   createSixDigitCode,
   hashOtpCode,
   normalizeEmail,
   parseOwnerSessionToken,
+  parseSignedActionToken,
   verifyOtpCode
 } from "./auth";
 import { createEmailService, createResendEmailService, type EmailService } from "./email";
@@ -75,6 +77,7 @@ import {
   isTelegramSecretValid,
   registerTelegramListingDraftWebhook,
   sendTelegramListingDraftReply,
+  sendTelegramOwnerBookingRequest,
   type TelegramOwnerServices,
 } from "./telegram";
 
@@ -199,8 +202,9 @@ interface OwnerServices {
 
 interface EmailOtpChallengeRecord {
   id: string;
-  userId: string;
+  userId?: string;
   email: string;
+  purpose?: "owner" | "guest_booking";
   codeHash: string;
   expiresAt: Date;
   consumedAt?: Date;
@@ -226,6 +230,9 @@ const withPaymentDetails = (booking: BookingIntent, paymentMode: PaymentMode): B
     unit: "booking"
   }
 });
+
+const formatMoney = (amount: number, currency: string) =>
+  `${currency} ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(amount)}`;
 
 const createRateLimiter = () => {
   const buckets = new Map<string, { count: number; resetAt: number }>();
@@ -263,6 +270,8 @@ const knownIds = <T extends string>(values: string[] | undefined, dictionary: Re
 export const buildServer = (options: BuildServerOptions = {}) => {
   const config = loadRuntimeConfig(options.config);
   const fetchImpl = options.fetch ?? fetch;
+  const bookingLinkSecret = config.bookingLinkSecret?.trim() || config.telegramWebhookSecret?.trim() || "local-booking-link-secret";
+  const publicAppUrl = (config.publicAppUrl || "http://localhost:5173").replace(/\/$/, "");
   const prismaDatabaseUrl = getPrismaDatabaseUrl(config);
   const ownerRepository = options.services?.ownerRepository ?? (
     prismaDatabaseUrl
@@ -545,6 +554,16 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     ...studios,
     ...await Promise.all((await ownerRepository.listPublishedDrafts()).map(createStudioFromPublishedOwnerDraft))
   ];
+  const getOwnerSessionForStudioSlug = async (studioSlug: string) => {
+    const publishedDrafts = await ownerRepository.listPublishedDrafts();
+    for (const draft of publishedDrafts) {
+      const publicDraft = toOwnerDraftPublicShape(draft);
+      if (ownerDraftPublishing.publishedStudioSlug(publicDraft) === studioSlug) {
+        return ownerRepository.getOwnerSessionByProfileId(draft.ownerProfileId);
+      }
+    }
+    return null;
+  };
   const bookingIntentStore = createJsonResourceStore<BookingIntent>(config.localDataDir, "booking-intents.json");
   const shortlistStore = createJsonResourceStore<SharedShortlist>(config.localDataDir, "shared-shortlists.json");
   const availabilityBlockStore = createJsonResourceStore<OwnerAvailabilityBlock>(config.localDataDir, "availability-blocks.json");
@@ -661,12 +680,22 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
-    const session = await ownerRepository.findOrCreateOwnerByEmail(email);
+    const draft = request.body.ownerDraftId ? await ownerRepository.getDraft(request.body.ownerDraftId) : null;
+    const session = draft
+      ? await ownerRepository.getOwnerSessionByProfileId(draft.ownerProfileId)
+      : await ownerRepository.findOrCreateOwnerByEmail(email);
+    if (!session) {
+      return reply.code(404).send({
+        error: "OWNER_DRAFT_NOT_FOUND",
+        message: "Owner draft was not found."
+      });
+    }
     const code = createOtpCode();
     emailOtpChallenges.unshift({
       id: `email_code_${++emailChallengeCount}`,
       userId: session.user.id,
       email,
+      purpose: "owner",
       codeHash: await hashOtpCode(code),
       expiresAt: createOtpExpiry()
     });
@@ -701,7 +730,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     }
 
     const challenge = emailOtpChallenges.find(
-      (item) => item.email === email && !item.consumedAt && item.expiresAt > new Date()
+      (item) => item.email === email && item.purpose === "owner" && !item.consumedAt && item.expiresAt > new Date()
     );
     if (!challenge || !(await verifyOtpCode(code, challenge.codeHash))) {
       return reply.code(400).send({
@@ -711,6 +740,12 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     }
 
     challenge.consumedAt = new Date();
+    if (!challenge.userId) {
+      return reply.code(400).send({
+        error: "INVALID_OWNER_EMAIL_CODE",
+        message: "The email code is invalid or expired."
+      });
+    }
     const session = await ownerRepository.markEmailVerified({
       userId: challenge.userId,
       email,
@@ -720,6 +755,76 @@ export const buildServer = (options: BuildServerOptions = {}) => {
 
     return {
       session: toOwnerSessionResponse(session, ownerSessionToken)
+    };
+  });
+
+  app.post<{
+    Body: {
+      studioSlug?: string;
+      email?: string;
+    };
+  }>("/api/booking/email-codes", async (request, reply) => {
+    const email = request.body.email ? normalizeEmail(request.body.email) : "";
+    const studio = request.body.studioSlug ? findStudioBySlug(await getCatalogStudios(), request.body.studioSlug) : undefined;
+    if (!email || !email.includes("@") || !studio) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_EMAIL",
+        message: "Choose a studio and enter a valid email before requesting a booking."
+      });
+    }
+
+    const code = createOtpCode();
+    emailOtpChallenges.unshift({
+      id: `email_code_${++emailChallengeCount}`,
+      email,
+      purpose: "guest_booking",
+      codeHash: await hashOtpCode(code),
+      expiresAt: createOtpExpiry()
+    });
+    try {
+      await (emailService.sendGuestBookingOtp?.({ to: email, code, studioName: studio.name }) ?? emailService.sendOwnerOtp({ to: email, code, studioName: studio.name }));
+    } catch {
+      return reply.code(502).send({
+        error: "EMAIL_SEND_FAILED",
+        message: "Email sender could not send the booking code. Check the email sender settings."
+      });
+    }
+
+    return {
+      ok: true,
+      email
+    };
+  });
+
+  app.post<{
+    Body: {
+      email?: string;
+      code?: string;
+    };
+  }>("/api/booking/email-codes/verify", async (request, reply) => {
+    const email = request.body.email ? normalizeEmail(request.body.email) : "";
+    const code = request.body.code?.trim() ?? "";
+    if (!email || !/^\d{6}$/.test(code)) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_EMAIL_CODE",
+        message: "Enter the 6-digit booking email code."
+      });
+    }
+
+    const challenge = emailOtpChallenges.find(
+      (item) => item.email === email && item.purpose === "guest_booking" && !item.consumedAt && item.expiresAt > new Date()
+    );
+    if (!challenge || !(await verifyOtpCode(code, challenge.codeHash))) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_EMAIL_CODE",
+        message: "The booking email code is invalid or expired."
+      });
+    }
+
+    challenge.consumedAt = new Date();
+    return {
+      emailVerified: true,
+      guestEmailToken: createSignedActionToken({ purpose: "guest_booking", email }, bookingLinkSecret)
     };
   });
 
@@ -815,6 +920,19 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       storageKey: uploaded.storageKey,
       publicUrl: uploaded.publicUrl
     });
+
+    if (fields.draftId) {
+      const analysis = await extractOwnerMediaFacts({
+        caption: uploadedFile.fileName,
+        imageUrl: uploaded.publicUrl
+      }, config, fetchImpl);
+      if (analysis.text) {
+        await ownerOnboardingService.appendText({
+          draftId: fields.draftId,
+          text: analysis.text
+        });
+      }
+    }
 
     return {
       media: {
@@ -1456,7 +1574,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   });
 
   app.post<{
-    Body: BookingIntentRequest & { studioSlug: string };
+    Body: BookingIntentRequest & { studioSlug: string; guestEmailToken?: string };
   }>("/booking-requests", async (request, reply) => {
     const studio = findStudioBySlug(await getCatalogStudios(), request.body.studioSlug);
 
@@ -1467,11 +1585,58 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
+    const guestEmailToken = request.body.guestEmailToken
+      ? parseSignedActionToken(request.body.guestEmailToken, bookingLinkSecret)
+      : null;
+    if (guestEmailToken?.purpose !== "guest_booking" || normalizeEmail(guestEmailToken.email ?? "") !== normalizeEmail(request.body.guestEmail)) {
+      return reply.code(403).send({
+        error: "BOOKING_EMAIL_NOT_VERIFIED",
+        message: "Verify your email before sending a booking request."
+      });
+    }
+
     try {
       const booking = createBookingIntent(studio, request.body);
       const pricedBooking = withPaymentDetails(booking, paymentMode);
       const bookingIntents = await bookingIntentStore.list();
       await bookingIntentStore.setAll([...bookingIntents, pricedBooking]);
+      const ownerSession = await getOwnerSessionForStudioSlug(studio.slug);
+      const approveToken = ownerSession
+        ? createSignedActionToken({
+            purpose: "owner_booking_approve",
+            bookingId: pricedBooking.id
+          }, bookingLinkSecret)
+        : undefined;
+      const approveUrl = approveToken
+        ? `${publicAppUrl}/api/owner/bookings/${encodeURIComponent(pricedBooking.id)}/approve?token=${encodeURIComponent(approveToken)}`
+        : undefined;
+      if (ownerSession?.user.email && emailService.sendOwnerBookingRequest) {
+        await emailService.sendOwnerBookingRequest({
+          to: ownerSession.user.email,
+          studioName: studio.name,
+          guestName: pricedBooking.guestName,
+          guestEmail: pricedBooking.guestEmail,
+          date: pricedBooking.date,
+          startTime: pricedBooking.startTime,
+          roomName: pricedBooking.roomName,
+          totalPrice: formatMoney(pricedBooking.totalPrice, pricedBooking.currency),
+          message: pricedBooking.message,
+          approveUrl: approveUrl ?? `${publicAppUrl}/#bookings`
+        });
+      }
+      if (ownerSession?.telegram?.telegramUserId && approveUrl) {
+        await sendTelegramOwnerBookingRequest({
+          chatId: ownerSession.telegram.telegramUserId,
+          studioName: studio.name,
+          guestName: pricedBooking.guestName,
+          guestEmail: pricedBooking.guestEmail,
+          date: pricedBooking.date,
+          startTime: pricedBooking.startTime,
+          roomName: pricedBooking.roomName,
+          totalPrice: formatMoney(pricedBooking.totalPrice, pricedBooking.currency),
+          approveUrl
+        }, config, fetchImpl).catch(() => false);
+      }
 
       return reply.code(201).send({
         booking: pricedBooking
@@ -1606,6 +1771,51 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     };
   });
 
+  app.get<{
+    Params: { bookingId: string };
+    Querystring: { token?: string };
+  }>("/api/owner/bookings/:bookingId/approve", async (request, reply) => {
+    const token = request.query.token ? parseSignedActionToken(request.query.token, bookingLinkSecret) : null;
+    if (token?.purpose !== "owner_booking_approve" || token.bookingId !== request.params.bookingId) {
+      return reply.code(403).send({
+        error: "INVALID_BOOKING_APPROVAL_LINK",
+        message: "This booking approval link is invalid or expired."
+      });
+    }
+
+    const bookingIntents = await bookingIntentStore.list();
+    const bookingIndex = bookingIntents.findIndex((booking) => booking.id === request.params.bookingId);
+    if (bookingIndex === -1) {
+      return reply.code(404).send({
+        error: "BOOKING_NOT_FOUND",
+        message: "Booking request was not found"
+      });
+    }
+
+    try {
+      const booking = withPaymentDetails(decideBookingIntent(bookingIntents[bookingIndex], "approve"), paymentMode);
+      bookingIntents[bookingIndex] = booking;
+      await bookingIntentStore.setAll(bookingIntents);
+      if (emailService.sendGuestBookingApproved) {
+        await emailService.sendGuestBookingApproved({
+          to: booking.guestEmail,
+          studioName: booking.studioName,
+          date: booking.date,
+          startTime: booking.startTime,
+          roomName: booking.roomName,
+          totalPrice: formatMoney(booking.totalPrice, booking.currency),
+          bookingUrl: `${publicAppUrl}/#bookings`
+        });
+      }
+      return reply.redirect(`${publicAppUrl}/#bookings`);
+    } catch (error) {
+      return reply.code(400).send({
+        error: "INVALID_BOOKING_DECISION",
+        message: error instanceof Error ? error.message : "Booking request cannot be approved"
+      });
+    }
+  });
+
   app.patch<{
     Params: { bookingId: string };
     Body: { decision: OwnerBookingDecision; ownerNote?: string };
@@ -1628,6 +1838,17 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       ), paymentMode);
       bookingIntents[bookingIndex] = booking;
       await bookingIntentStore.setAll(bookingIntents);
+      if (request.body.decision === "approve" && emailService.sendGuestBookingApproved) {
+        await emailService.sendGuestBookingApproved({
+          to: booking.guestEmail,
+          studioName: booking.studioName,
+          date: booking.date,
+          startTime: booking.startTime,
+          roomName: booking.roomName,
+          totalPrice: formatMoney(booking.totalPrice, booking.currency),
+          bookingUrl: `${publicAppUrl}/#bookings`
+        });
+      }
 
       return {
         booking

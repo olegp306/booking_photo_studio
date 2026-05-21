@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createSignedActionToken } from "./auth";
 import { createInMemoryOwnerRepository } from "./ownerRepository";
 import { buildServer } from "./server";
 
@@ -21,6 +22,9 @@ describe("studio API", () => {
       contentType: `multipart/form-data; boundary=${boundary}`
     };
   };
+
+  const verifiedGuestEmailToken = (email = "marta@example.com") =>
+    createSignedActionToken({ purpose: "guest_booking", email }, "local-booking-link-secret");
 
   it("returns health status", async () => {
     const server = buildServer();
@@ -239,6 +243,112 @@ describe("studio API", () => {
     });
   });
 
+  it("extracts price and house rules from uploaded owner media before publishing", async () => {
+    const server = buildServer({
+      config: {
+        openaiApiKey: "test-openai-key"
+      },
+      services: {
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async () => ({ id: "email_1" })
+        },
+        storage: {
+          uploadOwnerMedia: async (input) => ({
+            storageKey: `owners/${input.ownerId}/${input.fileName}`,
+            publicUrl: `https://media.example.com/owners/${input.ownerId}/${input.fileName}`
+          })
+        }
+      },
+      fetch: async (_url, init) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          text?: { format?: { name?: string } };
+          input?: Array<{ role?: string; content?: unknown }>;
+        };
+        const schemaName = body.text?.format?.name;
+        if (schemaName === "photo_studio_media_facts") {
+          return new Response(JSON.stringify({
+            output_text: JSON.stringify({
+              observedText: "Price list: 900 CZK/hour. Minimum booking 2 hours. No smoking.",
+              priceNotes: ["900 CZK per hour"],
+              conditionNotes: ["Minimum booking 2 hours", "No smoking"],
+              amenityNotes: [],
+              roomNotes: []
+            })
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        const serializedInput = JSON.stringify(body.input ?? []);
+        const includesMediaFacts = serializedInput.includes("900 CZK") && serializedInput.includes("No smoking");
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            tagline: "Loft Karlin studio.",
+            description: includesMediaFacts ? "Loft Karlin studio. Price is 900 CZK per hour." : "Loft Karlin studio.",
+            shootTypes: ["portrait"],
+            featureIds: [],
+            equipmentIds: [],
+            amenityIds: [],
+            rules: includesMediaFacts ? ["Minimum booking 2 hours", "No smoking"] : []
+          })
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    });
+
+    const started = await server.inject({
+      method: "POST",
+      url: "/api/owner/onboarding/start",
+      payload: {
+        source: "web",
+        text: "Loft Karlin studio in Prague."
+      }
+    });
+    const draft = started.json().draft;
+    const multipart = multipartBody(
+      { ownerSessionToken: draft.ownerSessionToken, draftId: draft.id },
+      { fieldName: "file", fileName: "price-list.jpg", mimeType: "image/jpeg", bytes: "image" }
+    );
+    const uploaded = await server.inject({
+      method: "POST",
+      url: "/api/owner/media",
+      headers: { "content-type": multipart.contentType },
+      payload: multipart.body
+    });
+
+    expect(uploaded.statusCode).toBe(200);
+
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { ownerDraftId: draft.id, email: "owner@example.com" }
+    });
+    const verified = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    const published = await server.inject({
+      method: "POST",
+      url: `/api/owner/onboarding/${draft.id}/publish`,
+      payload: { ownerSessionToken: verified.json().session.ownerSessionToken }
+    });
+
+    const catalog = await server.inject({ method: "GET", url: "/studios?query=Loft%20Karlin" });
+    expect(published.statusCode).toBe(200);
+    expect(catalog.json().studios).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          priceFrom: 900,
+          rules: expect.arrayContaining(["Minimum booking 2 hours", "No smoking"])
+        })
+      ])
+    );
+  });
+
   it("publishes owner drafts into the searchable catalog and booking path", async () => {
     const server = buildServer({
       services: {
@@ -328,6 +438,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Marta Client",
         guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
         shootType: "portrait",
         message: "Two-hour portrait session."
       }
@@ -340,6 +451,197 @@ describe("studio API", () => {
         totalPrice: 2400,
         paymentMode: "manual_at_studio",
         paymentInstructions: expect.stringContaining("pay the studio directly")
+      })
+    );
+  });
+
+  it("emails owner-created studios about booking requests and approves by magic link", async () => {
+    const ownerEmails: Array<{ approveUrl: string; to: string; guestEmail: string }> = [];
+    const guestApprovedEmails: Array<{ to: string; studioName: string }> = [];
+    const server = buildServer({
+      config: {
+        publicAppUrl: "https://studio.example.com"
+      },
+      services: {
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async () => ({ id: "owner_otp" }),
+          sendGuestBookingOtp: async () => ({ id: "guest_otp" }),
+          sendOwnerBookingRequest: async (input) => {
+            ownerEmails.push({
+              approveUrl: input.approveUrl,
+              to: input.to,
+              guestEmail: input.guestEmail
+            });
+            return { id: "owner_booking_request" };
+          },
+          sendGuestBookingApproved: async (input) => {
+            guestApprovedEmails.push({
+              to: input.to,
+              studioName: input.studioName
+            });
+            return { id: "guest_booking_approved" };
+          }
+        }
+      }
+    });
+
+    const started = await server.inject({
+      method: "POST",
+      url: "/api/owner/onboarding/start",
+      payload: {
+        source: "web",
+        text: "Loft Karlin, Prague studio, 1200 CZK per hour."
+      }
+    });
+    const draft = started.json().draft;
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { ownerDraftId: draft.id, email: "owner@example.com" }
+    });
+    const verifiedOwner = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    const published = await server.inject({
+      method: "POST",
+      url: `/api/owner/onboarding/${draft.id}/publish`,
+      payload: { ownerSessionToken: verifiedOwner.json().session.ownerSessionToken }
+    });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: published.json().listing.id,
+        roomId: `${published.json().listing.id}-main`,
+        date: "2026-06-15",
+        startTime: "10:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
+        shootType: "portrait",
+        message: "Two-hour portrait session."
+      }
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(ownerEmails).toEqual([
+      expect.objectContaining({
+        to: "owner@example.com",
+        guestEmail: "marta@example.com",
+        approveUrl: expect.stringContaining("/api/owner/bookings/")
+      })
+    ]);
+
+    const approveUrl = new URL(ownerEmails[0].approveUrl);
+    const approved = await server.inject({
+      method: "GET",
+      url: `${approveUrl.pathname}${approveUrl.search}`
+    });
+
+    expect(approved.statusCode).toBe(302);
+    expect(guestApprovedEmails).toEqual([
+      expect.objectContaining({
+        to: "marta@example.com",
+        studioName: expect.stringContaining("Loft Karlin")
+      })
+    ]);
+    const bookings = await server.inject({ method: "GET", url: "/bookings?guestEmail=marta@example.com" });
+    expect(bookings.json().bookings[0].status).toBe("confirmed");
+  });
+
+  it("keeps Telegram owner identity when email is verified and sends booking notifications there", async () => {
+    const telegramRequests: Array<{ url: string; init?: RequestInit }> = [];
+    const ownerRepository = createInMemoryOwnerRepository();
+    const server = buildServer({
+      config: {
+        publicAppUrl: "https://studio.example.com",
+        telegramBotToken: "telegram-test-token"
+      },
+      services: {
+        ownerRepository,
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async () => ({ id: "owner_otp" }),
+          sendGuestBookingOtp: async () => ({ id: "guest_otp" }),
+          sendOwnerBookingRequest: async () => ({ id: "owner_booking_request" }),
+          sendGuestBookingApproved: async () => ({ id: "guest_booking_approved" })
+        }
+      },
+      fetch: async (url, init) => {
+        telegramRequests.push({ url: String(url), init });
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    });
+    const owner = await ownerRepository.findOrCreateOwnerByTelegram({
+      telegramUserId: "3003",
+      username: "anna_studio",
+      firstName: "Anna"
+    });
+    const draft = await ownerRepository.createDraft({
+      ownerProfileId: owner.ownerProfile.id,
+      source: "telegram",
+      rawText: "Photo Loft Prague, 1300 CZK per hour daylight studio."
+    });
+    await ownerRepository.saveAiDraft({
+      draftId: draft.id,
+      aiDraftJson: {
+        studioName: "Photo Loft Prague",
+        city: "Prague",
+        description: "Daylight studio.",
+        suggestedAmenities: [],
+        suggestedRules: [],
+        suggestedRooms: []
+      },
+      status: "draft_ready"
+    });
+
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { ownerDraftId: draft.id, email: "owner@example.com" }
+    });
+    const verifiedOwner = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    const published = await server.inject({
+      method: "POST",
+      url: `/api/owner/onboarding/${draft.id}/publish`,
+      payload: { ownerSessionToken: verifiedOwner.json().session.ownerSessionToken }
+    });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug: published.json().listing.id,
+        roomId: `${published.json().listing.id}-main`,
+        date: "2026-06-15",
+        startTime: "10:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
+        shootType: "portrait",
+        message: "Two-hour portrait session."
+      }
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(telegramRequests[0].url).toBe("https://api.telegram.org/bottelegram-test-token/sendMessage");
+    expect(JSON.parse(String(telegramRequests[0].init?.body))).toEqual(
+      expect.objectContaining({
+        chat_id: "3003",
+        text: expect.stringContaining("Confirm booking: https://studio.example.com/api/owner/bookings/")
       })
     );
   });
@@ -1714,6 +2016,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Marta Client",
         guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
         shootType: "product",
         message: "Need product table"
       }
@@ -1743,6 +2046,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Marta Client",
         guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
         shootType: "product",
         message: "Need product table"
       }
@@ -1792,6 +2096,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Marta Client",
         guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
         shootType: "product",
         message: "Need product table"
       }
@@ -2046,6 +2351,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Marta Client",
         guestEmail: "marta@example.com",
+        guestEmailToken: verifiedGuestEmailToken(),
         shootType: "product",
         message: "Need product table"
       }
@@ -2080,6 +2386,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Olga Photographer",
         guestEmail: "olga@example.com",
+        guestEmailToken: verifiedGuestEmailToken("olga@example.com"),
         shootType: "portrait",
         message: "Small portrait session"
       }
@@ -2118,6 +2425,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Olga Photographer",
         guestEmail: "olga@example.com",
+        guestEmailToken: verifiedGuestEmailToken("olga@example.com"),
         shootType: "portrait",
         message: "Small portrait session"
       }
@@ -2150,6 +2458,7 @@ describe("studio API", () => {
         durationHours: 2,
         guestName: "Olga Photographer",
         guestEmail: "olga@example.com",
+        guestEmailToken: verifiedGuestEmailToken("olga@example.com"),
         shootType: "portrait",
         message: "Small portrait session"
       }

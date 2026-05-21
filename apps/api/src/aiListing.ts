@@ -106,8 +106,13 @@ export const generateListingDraft = async (
         input: [
           {
             role: "system",
-            content:
-              "You generate JSON for a photo studio marketplace listing. Use only enum values from the schema. Keep the tagline short and commercial."
+            content: [
+              "You generate JSON for a photo studio marketplace listing. Use only enum values from the schema.",
+              "Keep the tagline short and commercial.",
+              "Parse all owner-provided facts, including text that came from uploaded photos or screenshots.",
+              "Pay special attention to prices, currencies, hourly/day rates, deposits, minimum booking durations, cancellation terms, access notes, house rules, included equipment, amenities, room names, light, props, and suitable shoot types.",
+              "Put price and policy facts that do not fit enum fields into description or rules so they are not lost."
+            ].join(" ")
           },
           {
             role: "user",

@@ -45,6 +45,18 @@ export interface TelegramOwnerServices {
   }): Promise<TelegramOwnerMediaSummary>;
 }
 
+export interface TelegramBookingRequestInput {
+  chatId?: number | string;
+  studioName: string;
+  guestName: string;
+  guestEmail: string;
+  date: string;
+  startTime: string;
+  roomName: string;
+  totalPrice: string;
+  approveUrl: string;
+}
+
 export interface TelegramBotHandlerResult {
   ok: true;
   messages: Array<{
@@ -230,6 +242,32 @@ export const sendTelegramListingDraftReply = async (
         "Listing draft ready.",
         `Draft: ${record.draft.tagline}`,
         `Open Telegram draft inbox: ${(config.publicAppUrl || "http://localhost:5173").replace(/\/$/, "")}/#telegram-drafts`
+      ].join("\n")
+    })
+  });
+
+  return response.ok;
+};
+
+export const sendTelegramOwnerBookingRequest = async (
+  input: TelegramBookingRequestInput,
+  config: RuntimeConfig,
+  fetchImpl: FetchLike = fetch
+) => {
+  if (!input.chatId || !config.telegramBotToken?.trim()) return false;
+
+  const response = await fetchImpl(`https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      chat_id: input.chatId,
+      text: [
+        `New booking request for ${input.studioName}.`,
+        `${input.guestName} wants ${input.roomName} on ${input.date} at ${input.startTime}.`,
+        `Total: ${input.totalPrice}. Guest email: ${input.guestEmail}.`,
+        `Confirm booking: ${input.approveUrl}`
       ].join("\n")
     })
   });

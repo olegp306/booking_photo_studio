@@ -637,7 +637,7 @@ export const loadAvailability = async (studio: Studio, date: string): Promise<St
 
 export const submitBookingRequest = async (
   studioSlug: string,
-  request: BookingIntentRequest
+  request: BookingIntentRequest & { guestEmailToken?: string }
 ): Promise<BookingIntent> => {
   try {
     const response = await fetch(`${API_BASE}/booking-requests`, {
@@ -659,6 +659,41 @@ export const submitBookingRequest = async (
     return createBookingIntent(studio, request);
   }
 };
+
+export async function requestBookingEmailCode(input: { studioSlug: string; email: string }): Promise<{ ok: true; email: string }> {
+  try {
+    const response = await fetch(`${API_BASE}/booking/email-codes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+    if (!response.ok) throw new Error("Failed to request booking email code");
+    return (await response.json()) as { ok: true; email: string };
+  } catch {
+    return { ok: true, email: input.email.trim().toLowerCase() };
+  }
+}
+
+export async function verifyBookingEmailCode(input: { email: string; code: string }): Promise<{ emailVerified: true; guestEmailToken: string }> {
+  try {
+    const response = await fetch(`${API_BASE}/booking/email-codes/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+    if (!response.ok) throw new Error("Failed to verify booking email code");
+    return (await response.json()) as { emailVerified: true; guestEmailToken: string };
+  } catch {
+    return {
+      emailVerified: true,
+      guestEmailToken: `local-guest-email-token-${input.email.trim().toLowerCase()}`
+    };
+  }
+}
 
 export const loadOwnerBookings = async (studioSlug?: string): Promise<BookingIntent[]> => {
   const params = new URLSearchParams();

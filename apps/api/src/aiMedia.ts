@@ -24,6 +24,14 @@ export interface MediaSuggestionResult {
   suggestion: MediaSuggestion;
 }
 
+export interface OwnerMediaFacts {
+  observedText: string;
+  priceNotes: string[];
+  conditionNotes: string[];
+  amenityNotes: string[];
+  roomNotes: string[];
+}
+
 const mediaKinds: Array<StudioImage["kind"]> = ["hero", "room", "example", "equipment"];
 
 const mediaSuggestionSchema = {
@@ -34,6 +42,31 @@ const mediaSuggestionSchema = {
     kind: { type: "string", enum: mediaKinds },
     roomId: { type: ["string", "null"] },
     reason: { type: "string" }
+  }
+};
+
+const ownerMediaFactsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["observedText", "priceNotes", "conditionNotes", "amenityNotes", "roomNotes"],
+  properties: {
+    observedText: { type: "string" },
+    priceNotes: {
+      type: "array",
+      items: { type: "string" }
+    },
+    conditionNotes: {
+      type: "array",
+      items: { type: "string" }
+    },
+    amenityNotes: {
+      type: "array",
+      items: { type: "string" }
+    },
+    roomNotes: {
+      type: "array",
+      items: { type: "string" }
+    }
   }
 };
 
@@ -193,6 +226,104 @@ export const suggestMediaDetails = async (
     return {
       mode: "local-fallback",
       suggestion: fallback
+    };
+  }
+};
+
+const cleanNotes = (values: unknown) =>
+  Array.isArray(values) ? values.map((value) => String(value).trim()).filter(Boolean).slice(0, 12) : [];
+
+const normalizeOwnerMediaFacts = (value: Partial<OwnerMediaFacts>): OwnerMediaFacts => ({
+  observedText: value.observedText?.trim() ?? "",
+  priceNotes: cleanNotes(value.priceNotes),
+  conditionNotes: cleanNotes(value.conditionNotes),
+  amenityNotes: cleanNotes(value.amenityNotes),
+  roomNotes: cleanNotes(value.roomNotes)
+});
+
+export const ownerMediaFactsToText = (facts: OwnerMediaFacts) =>
+  [
+    facts.observedText && `Media text: ${facts.observedText}`,
+    facts.priceNotes.length > 0 && `Prices found in uploaded media: ${facts.priceNotes.join("; ")}`,
+    facts.conditionNotes.length > 0 && `Conditions found in uploaded media: ${facts.conditionNotes.join("; ")}`,
+    facts.amenityNotes.length > 0 && `Amenities found in uploaded media: ${facts.amenityNotes.join("; ")}`,
+    facts.roomNotes.length > 0 && `Rooms found in uploaded media: ${facts.roomNotes.join("; ")}`
+  ].filter(Boolean).join("\n");
+
+export const extractOwnerMediaFacts = async (
+  request: Pick<MediaSuggestionRequest, "caption" | "imageUrl">,
+  config: RuntimeConfig,
+  fetchImpl: FetchLike = fetch
+): Promise<MediaSuggestionResult & { facts: OwnerMediaFacts; text: string }> => {
+  const emptyFacts = normalizeOwnerMediaFacts({});
+  if (!hasConfiguredOpenAi(config) || !request.imageUrl?.trim()) {
+    return {
+      mode: "local-fallback",
+      suggestion: suggestMediaLocally(request),
+      facts: emptyFacts,
+      text: ""
+    };
+  }
+
+  try {
+    const response = await fetchImpl("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.openaiApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.openaiListingModel?.trim() || "gpt-4.1-mini",
+        input: [
+          {
+            role: "system",
+            content: [
+              "You extract owner-submitted photo studio listing facts from uploaded media.",
+              "Read visible text carefully, especially price lists, deposits, minimum booking rules, house rules, access conditions, cancellation terms, room names, equipment, amenities, and included services.",
+              "Return only facts visible in the image or caption. Preserve currencies and units such as CZK/hour or EUR/day."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `File or owner caption: ${request.caption?.trim() || "No caption provided."}`
+              },
+              {
+                type: "input_image",
+                image_url: request.imageUrl.trim()
+              }
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "photo_studio_media_facts",
+            strict: true,
+            schema: ownerMediaFactsSchema
+          }
+        }
+      })
+    });
+
+    if (!response.ok) throw new Error(`OpenAI owner media facts failed with ${response.status}`);
+    const outputText = extractOutputText(await response.json());
+    if (!outputText) throw new Error("OpenAI owner media facts response did not include output text");
+    const facts = normalizeOwnerMediaFacts(JSON.parse(outputText) as Partial<OwnerMediaFacts>);
+    return {
+      mode: "openai",
+      suggestion: suggestMediaLocally(request),
+      facts,
+      text: ownerMediaFactsToText(facts)
+    };
+  } catch {
+    return {
+      mode: "local-fallback",
+      suggestion: suggestMediaLocally(request),
+      facts: emptyFacts,
+      text: ""
     };
   }
 };

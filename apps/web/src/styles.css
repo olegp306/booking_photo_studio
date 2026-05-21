@@ -213,6 +213,33 @@ h2 {
   text-decoration: none;
 }
 
+.owner-email-cooldown {
+  margin: -4px 0 0;
+  color: #74685d;
+  font-size: 13px;
+}
+
+.owner-publish-success {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #9ac9a7;
+  border-radius: 8px;
+  background: #f0fff4;
+  padding: 10px 12px;
+  color: #1f6b38;
+}
+
+.owner-publish-success span {
+  color: #315d40;
+  font-size: 13px;
+}
+
+.request-button.success {
+  border-color: #2f8f4f;
+  background: #2f8f4f;
+  color: #fff;
+}
+
 .owner-email-form {
   grid-template-columns: 1fr auto;
   align-items: end;

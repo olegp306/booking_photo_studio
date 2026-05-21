@@ -75,7 +75,9 @@ import {
   updateSharedShortlist,
   uploadOwnerMedia,
   requestOwnerEmailCode,
+  requestBookingEmailCode,
   verifyOwnerEmailCode,
+  verifyBookingEmailCode,
   type ImportedListingDraft,
   type ListingReviewDecision,
   type ListingReviewItem,
@@ -689,8 +691,20 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
   const [code, setCode] = useState("");
   const [emailRequested, setEmailRequested] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [emailCooldownSeconds, setEmailCooldownSeconds] = useState(0);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isPublishingDraft, setIsPublishingDraft] = useState(false);
   const [publishedListing, setPublishedListing] = useState<PublishedStudioListing | undefined>();
   const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    if (emailCooldownSeconds <= 0) return undefined;
+    const timer = window.setTimeout(() => {
+      setEmailCooldownSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [emailCooldownSeconds]);
 
   const createDraft = async (event: FormEvent) => {
     event.preventDefault();
@@ -721,44 +735,59 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
 
   const requestCode = async (event: FormEvent) => {
     event.preventDefault();
-    if (!draft || !email.trim()) return;
+    if (!draft || !email.trim() || emailCooldownSeconds > 0 || isSendingCode) return;
+    setIsSendingCode(true);
     setStatus("Sending email code...");
     try {
       await requestOwnerEmailCode({ draftId: draft.id, email: email.trim() });
       setEmailRequested(true);
+      setEmailCooldownSeconds(60);
       setStatus("Email code sent.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send email code. Check the email sender settings and try again.");
+    } finally {
+      setIsSendingCode(false);
     }
   };
 
   const verifyCode = async (event: FormEvent) => {
     event.preventDefault();
-    if (!/^\d{6}$/.test(code) || !email.trim()) return;
+    if (!/^\d{6}$/.test(code) || !email.trim() || isVerifyingCode || emailVerified) return;
+    setIsVerifyingCode(true);
     setStatus("Verifying email...");
     try {
       const session = await verifyOwnerEmailCode({ email: email.trim(), code });
       setEmailVerified(session.emailVerified);
       if (draft) setDraft({ ...draft, ownerSessionToken: session.ownerSessionToken });
-      setStatus(session.emailVerified ? "Email verified." : "Email code was not verified.");
+      setStatus(session.emailVerified ? "Verify success." : "Email code was not verified.");
     } catch {
       setStatus("Could not verify email code. Check the 6-digit code and try again.");
+    } finally {
+      setIsVerifyingCode(false);
     }
   };
 
   const publishDraft = async () => {
+    if (publishedListing?.publicUrl) {
+      window.location.hash = publishedListing.publicUrl.replace(/^#/, "");
+      onClose();
+      return;
+    }
     if (!draft?.ownerSessionToken) {
       setStatus("Verify email before publishing this draft.");
       return;
     }
+    setIsPublishingDraft(true);
     setStatus("Publishing draft...");
     try {
       const listing = await publishOwnerDraft({ draftId: draft.id, ownerSessionToken: draft.ownerSessionToken });
       setPublishedListing(listing);
       setDraft({ ...draft, status: "published" });
-      setStatus("Draft published.");
+      setStatus("Studio published. Open the listing to review it or continue editing from the owner dashboard.");
     } catch {
       setStatus("Could not publish draft. Verify email and complete any required account details.");
+    } finally {
+      setIsPublishingDraft(false);
     }
   };
 
@@ -830,12 +859,25 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
           <form className="owner-email-form" onSubmit={requestCode}>
             <label>
               Email
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+              <input
+                disabled={emailCooldownSeconds > 0 || isSendingCode || emailVerified}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                required
+              />
             </label>
-            <button className="request-button secondary" type="submit">
-              Send code
+            <button
+              className="request-button secondary"
+              disabled={emailCooldownSeconds > 0 || isSendingCode || emailVerified}
+              type="submit"
+            >
+              {isSendingCode ? "Sending..." : "Send code"}
             </button>
           </form>
+          {emailCooldownSeconds > 0 && (
+            <p className="owner-email-cooldown">Send code again in {emailCooldownSeconds}s.</p>
+          )}
           {emailRequested && (
             <form className="owner-email-form" onSubmit={verifyCode}>
               <label>
@@ -845,26 +887,37 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
                   maxLength={6}
                   pattern="\d{6}"
                   value={code}
+                  disabled={isVerifyingCode || emailVerified}
                   onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                   required
                 />
               </label>
-              <button className="request-button" disabled={code.length !== 6} type="submit">
-                Verify email
+              <button
+                className={`request-button ${emailVerified ? "success" : ""}`}
+                disabled={code.length !== 6 || isVerifyingCode || emailVerified}
+                type="submit"
+              >
+                {emailVerified ? "Verified" : isVerifyingCode ? "Verifying..." : "Verify email"}
               </button>
             </form>
           )}
+          {publishedListing && (
+            <div className="owner-publish-success" role="status">
+              <strong>Studio published.</strong>
+              <span>Your imported studio is live. Open it now to review the public listing and adjust details in the owner dashboard.</span>
+            </div>
+          )}
           <button
             className="request-button"
-            disabled={!emailVerified || draft.status === "published"}
+            disabled={(!emailVerified || isPublishingDraft) && !publishedListing}
             onClick={publishDraft}
             type="button"
           >
-            {draft.status === "published" ? "Published" : "Publish draft"}
+            {publishedListing ? "Open studio listing" : isPublishingDraft ? "Publishing..." : "Publish draft"}
           </button>
           {publishedListing?.publicUrl && (
             <a className="request-button secondary owner-published-link" href={publishedListing.publicUrl}>
-              Open published listing
+              Open studio listing
             </a>
           )}
         </section>
@@ -1028,6 +1081,11 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
   const [shareOpen, setShareOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
+  const [guestEmailCode, setGuestEmailCode] = useState("");
+  const [guestEmailRequested, setGuestEmailRequested] = useState(false);
+  const [guestEmailVerified, setGuestEmailVerified] = useState(false);
+  const [guestEmailToken, setGuestEmailToken] = useState("");
+  const [bookingEmailStatus, setBookingEmailStatus] = useState("");
   const [shootNotes, setShootNotes] = useState("");
   const [booking, setBooking] = useState<BookingIntent | undefined>();
   const bookingDate = "2026-06-12";
@@ -1046,7 +1104,7 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
 
   const submitBooking = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedSlot || !selectedSlot.available) return;
+    if (!selectedSlot || !selectedSlot.available || booking || !guestEmailVerified || !guestEmailToken) return;
 
     const nextBooking = await submitBookingRequest(studio.slug, {
       roomId: selectedSlot.roomId,
@@ -1055,12 +1113,40 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
       durationHours: selectedSlot.durationHours,
       guestName,
       guestEmail,
+      guestEmailToken,
       shootType: "product",
       message: shootNotes
     });
 
     setBooking(nextBooking);
     onBookingCreated(nextBooking);
+  };
+
+  const requestGuestEmailCode = async () => {
+    if (!guestEmail.trim() || booking) return;
+    setBookingEmailStatus("Sending booking email code...");
+    try {
+      await requestBookingEmailCode({ studioSlug: studio.slug, email: guestEmail.trim() });
+      setGuestEmailRequested(true);
+      setGuestEmailVerified(false);
+      setGuestEmailToken("");
+      setBookingEmailStatus("Booking email code sent.");
+    } catch {
+      setBookingEmailStatus("Could not send booking email code. Check your email and try again.");
+    }
+  };
+
+  const verifyGuestEmailCode = async () => {
+    if (!/^\d{6}$/.test(guestEmailCode) || !guestEmail.trim()) return;
+    setBookingEmailStatus("Verifying booking email...");
+    try {
+      const verified = await verifyBookingEmailCode({ email: guestEmail.trim(), code: guestEmailCode });
+      setGuestEmailVerified(verified.emailVerified);
+      setGuestEmailToken(verified.guestEmailToken);
+      setBookingEmailStatus("Booking email verified.");
+    } catch {
+      setBookingEmailStatus("Could not verify booking email code.");
+    }
   };
 
   return (
@@ -1223,16 +1309,49 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
               <input
                 type="email"
                 value={guestEmail}
-                onChange={(event) => setGuestEmail(event.target.value)}
+                onChange={(event) => {
+                  setGuestEmail(event.target.value);
+                  setGuestEmailVerified(false);
+                  setGuestEmailToken("");
+                }}
                 required
               />
             </label>
+            <div className="booking-email-actions">
+              <button className="request-button secondary" disabled={Boolean(booking) || !guestEmail.trim()} onClick={requestGuestEmailCode} type="button">
+                Send email code
+              </button>
+              {guestEmailRequested && (
+                <>
+                  <label>
+                    Email code
+                    <input
+                      inputMode="numeric"
+                      maxLength={6}
+                      pattern="\d{6}"
+                      value={guestEmailCode}
+                      onChange={(event) => setGuestEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      required
+                    />
+                  </label>
+                  <button
+                    className={`request-button ${guestEmailVerified ? "success" : "secondary"}`}
+                    disabled={guestEmailCode.length !== 6 || guestEmailVerified || Boolean(booking)}
+                    onClick={verifyGuestEmailCode}
+                    type="button"
+                  >
+                    {guestEmailVerified ? "Email verified" : "Verify email"}
+                  </button>
+                </>
+              )}
+            </div>
+            {bookingEmailStatus && <p className="booking-status" role="status">{bookingEmailStatus}</p>}
             <label>
               Shoot notes
               <textarea value={shootNotes} onChange={(event) => setShootNotes(event.target.value)} required />
             </label>
-            <button className="request-button" type="submit">
-              Request booking
+            <button className="request-button" disabled={Boolean(booking) || !guestEmailVerified} type="submit">
+              {booking ? "Request sent" : guestEmailVerified ? "Request booking" : "Verify email to request"}
             </button>
           </form>
 

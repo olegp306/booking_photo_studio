@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -406,12 +406,114 @@ describe("App", () => {
 
     await user.type(screen.getByLabelText(/6-digit code/i), "123456");
     await user.click(screen.getByRole("button", { name: /verify email/i }));
-    expect(await screen.findByText(/email verified/i)).toBeInTheDocument();
+    expect(await screen.findByText(/verify success/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /publish draft/i }));
-    expect(await screen.findByText(/draft published/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open published listing/i })).toHaveAttribute("href", "#studio/loft-karlin-draft-1");
+    await screen.findByRole("link", { name: /open studio listing/i });
+    expect(screen.getAllByText(/studio published/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /open studio listing/i })).toHaveAttribute("href", "#studio/loft-karlin-draft-1");
     expect(publishRequests[0]).toContain("verified-token");
+  });
+
+  const verifyBookingEmail = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "Send email code" }));
+    expect(await screen.findByText("Booking email code sent.")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Email code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Verify email" }));
+    expect(await screen.findByText("Booking email verified.")).toBeInTheDocument();
+  };
+
+  it("locks email resend for 60 seconds, shows verify progress, and turns publish into an open studio action", async () => {
+    const user = userEvent.setup();
+    let verifyResolver: ((response: Response) => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/owner/onboarding/start")) {
+        return new Response(
+          JSON.stringify({
+            draft: {
+              id: "draft_1",
+              source: "web",
+              status: "draft_ready",
+              ownerSessionToken: "owner-token",
+              rawText: "Karlin studio",
+              studioName: "Loft Karlin",
+              city: "Prague",
+              description: "Bright studio.",
+              suggestedAmenities: [],
+              suggestedRules: [],
+              suggestedRooms: [],
+              media: [],
+              missingFields: []
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/owner/email-codes") && !url.includes("/verify")) {
+        return new Response(JSON.stringify({ ok: true, email: "owner@example.com" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (url.includes("/owner/email-codes/verify")) {
+        return new Promise<Response>((resolve) => {
+          verifyResolver = resolve;
+        });
+      }
+      if (url.includes("/owner/onboarding/draft_1/publish")) {
+        return new Response(JSON.stringify({ listing: { id: "loft-karlin-draft-1", draftId: "draft_1", studioName: "Loft Karlin", city: "Prague", status: "published", publicUrl: "#studio/loft-karlin-draft-1" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      throw new Error(`Unexpected request ${url} ${String(init?.method ?? "GET")}`);
+    });
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /list your studio/i }));
+    await user.type(screen.getByLabelText(/studio description/i), "Karlin studio");
+    await user.click(screen.getByRole("button", { name: /create draft/i }));
+    await screen.findByText(/Loft Karlin/i);
+    await user.type(screen.getByLabelText("Email"), "owner@example.com");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /send code/i }));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(screen.getByRole("button", { name: /send code/i })).toBeDisabled();
+      expect(screen.getByLabelText("Email")).toBeDisabled();
+      expect(screen.getByText(/send code again in 60s/i)).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(screen.getByRole("button", { name: /send code/i })).not.toBeDisabled();
+      expect(screen.getByLabelText("Email")).not.toBeDisabled();
+
+      fireEvent.change(screen.getByLabelText(/6-digit code/i), { target: { value: "123456" } });
+      fireEvent.click(screen.getByRole("button", { name: /verify email/i }));
+      expect(screen.getByRole("button", { name: /verifying/i })).toBeDisabled();
+
+      verifyResolver?.(new Response(JSON.stringify({ session: { emailVerified: true, ownerSessionToken: "verified-token" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByRole("button", { name: /verified/i })).toHaveClass("success");
+
+      const publishButton = screen.getByRole("button", { name: /publish draft/i });
+      expect(publishButton).not.toBeDisabled();
+      fireEvent.click(publishButton);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getAllByText(/studio published/i).length).toBeGreaterThan(0);
+      expect(screen.getByRole("link", { name: /open studio listing/i })).toHaveAttribute("href", "#studio/loft-karlin-draft-1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows referral source totals in the host growth view", async () => {
@@ -594,9 +696,11 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Name"), "Marta Client");
     await user.type(screen.getByLabelText("Email"), "marta@example.com");
     await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await verifyBookingEmail(user);
     await user.click(screen.getByRole("button", { name: "Request booking" }));
 
     expect(await screen.findByText("Request sent: waiting for owner approval.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request sent" })).toBeDisabled();
   });
 
   it("shows owners incoming booking requests and approval action", async () => {
@@ -608,6 +712,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Name"), "Marta Client");
     await user.type(screen.getByLabelText("Email"), "marta@example.com");
     await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await verifyBookingEmail(user);
     await user.click(screen.getByRole("button", { name: "Request booking" }));
     await screen.findByText("Request sent: waiting for owner approval.");
 
@@ -630,6 +735,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Name"), "Marta Client");
     await user.type(screen.getByLabelText("Email"), "marta@example.com");
     await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await verifyBookingEmail(user);
     await user.click(screen.getByRole("button", { name: "Request booking" }));
     await screen.findByText("Request sent: waiting for owner approval.");
 
@@ -659,6 +765,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Name"), "Marta Client");
     await user.type(screen.getByLabelText("Email"), "marta@example.com");
     await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await verifyBookingEmail(user);
     await user.click(screen.getByRole("button", { name: "Request booking" }));
     await screen.findByText("Request sent: waiting for owner approval.");
     await user.click(screen.getByRole("button", { name: "Back to results" }));
@@ -690,6 +797,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Name"), "Marta Client");
     await user.type(screen.getByLabelText("Email"), "marta@example.com");
     await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await verifyBookingEmail(user);
     await user.click(screen.getByRole("button", { name: "Request booking" }));
     await screen.findByText("Request sent: waiting for owner approval.");
     await user.click(screen.getByRole("button", { name: "Back to results" }));
@@ -712,6 +820,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Name"), "Marta Client");
     await user.type(screen.getByLabelText("Email"), "marta@example.com");
     await user.type(screen.getByLabelText("Shoot notes"), "Need product table");
+    await verifyBookingEmail(user);
     await user.click(screen.getByRole("button", { name: "Request booking" }));
     await screen.findByText("Request sent: waiting for owner approval.");
     await user.click(screen.getByRole("button", { name: "Back to results" }));

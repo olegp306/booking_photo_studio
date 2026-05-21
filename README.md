@@ -12,6 +12,7 @@ Copy `.env.example` to `.env.local` for local work and fill production values in
 - `RESEND_API_KEY` and `EMAIL_FROM` for 6-digit owner email codes.
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` for owner media.
 - `TELEGRAM_BOT_TOKEN` and optional `TELEGRAM_WEBHOOK_SECRET` for owner intake.
+- `BOOKING_LINK_SECRET` for signed guest email and owner approval links.
 - `OPENAI_API_KEY` for AI-assisted listing drafts.
 - `MANUAL_PAYMENT_MODE=true` for direct studio payment.
 
@@ -60,6 +61,8 @@ curl "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/setWebhook?url=https:/
 Owners can send text or photos to the bot. Text creates a studio draft; photos are attached to the draft flow. Publishing still requires verified email from the web.
 
 If `TELEGRAM_WEBHOOK_SECRET` is set, include the same secret when configuring the webhook so inbound requests pass the `x-telegram-bot-api-secret-token` check.
+
+When a Telegram-created draft is later verified by email in the web app, the same owner profile keeps both identities. Booking request notifications are sent by email and, when `TELEGRAM_BOT_TOKEN` is configured, also to the linked Telegram chat.
 
 ## Owner Web Chat Test
 

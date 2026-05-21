@@ -97,6 +97,7 @@ export interface OwnerRepository {
   findOrCreateOwnerByTelegram(input: TelegramOwnerInput): Promise<OwnerSession>;
   findOrCreateOwnerByEmail(email: string): Promise<OwnerSession>;
   getOwnerSession(userId: string): Promise<OwnerSession | null>;
+  getOwnerSessionByProfileId(ownerProfileId: string): Promise<OwnerSession | null>;
   getDraft(draftId: string): Promise<OwnerOnboardingDraft | null>;
   listPublishedDrafts(): Promise<OwnerOnboardingDraft[]>;
   getDraftMedia(draftId: string): Promise<OwnerMedia[]>;
@@ -281,6 +282,20 @@ export const createPrismaOwnerRepository = (database: any): OwnerRepository => {
       return session ? toOwnerSession(session) : null;
     },
 
+    async getOwnerSessionByProfileId(ownerProfileId) {
+      const profile = await database.ownerProfile.findUnique({
+        where: {
+          id: ownerProfileId
+        },
+        include: {
+          user: {
+            include: includeOwnerSession
+          }
+        }
+      });
+      return profile?.user ? toOwnerSession(await ensureOwnerSession(profile.user)) : null;
+    },
+
     async getDraft(draftId) {
       const draft = await database.ownerOnboardingDraft.findUnique({
         where: {
@@ -457,6 +472,10 @@ export const createInMemoryOwnerRepository = (): OwnerRepository => {
 
     async getOwnerSession(userId) {
       return sessions.get(userId) ?? null;
+    },
+
+    async getOwnerSessionByProfileId(ownerProfileId) {
+      return Array.from(sessions.values()).find((session) => session.ownerProfile.id === ownerProfileId) ?? null;
     },
 
     async getDraft(draftId) {

@@ -49,11 +49,13 @@ export interface OwnerOnboardingService {
   publishDraft(input: PublishDraftInput): Promise<PublishedStudioListing>;
 }
 
-const missingFieldsFor = (aiDraft: AiOwnerDraft) => [
+const hasPrice = (text: string) => /(\d[\d\s.,]*)\s*(czk|kč|eur|€)/i.test(text);
+
+const missingFieldsFor = (aiDraft: AiOwnerDraft, rawText: string) => [
   !aiDraft.studioName && "studioName",
   !aiDraft.city && "city",
   !aiDraft.description && "description",
-  "price"
+  !hasPrice(rawText) && "price"
 ].filter(Boolean) as string[];
 
 const emptyAiDraft = (rawText: string): AiOwnerDraft => ({
@@ -110,7 +112,7 @@ export function createOwnerOnboardingService(deps: OwnerOnboardingDeps): OwnerOn
       suggestedRules: aiDraft.suggestedRules ?? [],
       suggestedRooms: aiDraft.suggestedRooms ?? [],
       media: toPublicMedia(await deps.repository.getDraftMedia(draft.id)),
-      missingFields: missingFieldsFor(aiDraft)
+      missingFields: missingFieldsFor(aiDraft, draft.rawText)
     };
   };
 

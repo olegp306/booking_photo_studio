@@ -8,6 +8,7 @@ export interface RuntimeConfig {
   envFile: string;
   localDataDir?: string;
   manualPaymentMode?: boolean;
+  bookingLinkSecret?: string;
   openaiApiKey?: string;
   openaiListingModel?: string;
   publicAppUrl?: string;
@@ -124,6 +125,7 @@ export const loadRuntimeConfig = (overrides: Partial<RuntimeConfig> = {}): Runti
     envFile,
     localDataDir: source.LOCAL_DATA_DIR,
     manualPaymentMode: source.MANUAL_PAYMENT_MODE === undefined ? true : parseBoolean(source.MANUAL_PAYMENT_MODE),
+    bookingLinkSecret: source.BOOKING_LINK_SECRET,
     openaiApiKey: source.OPENAI_API_KEY,
     openaiListingModel: source.OPENAI_LISTING_MODEL,
     publicAppUrl: source.PUBLIC_APP_URL,
