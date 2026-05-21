@@ -14,7 +14,15 @@ export type SupportCategory =
   | "payment"
   | "owner_listing"
   | "idea"
-  | "bug";
+  | "bug"
+  | "feature_request"
+  | "bug_report"
+  | "listing_quality"
+  | "owner_onboarding"
+  | "other";
+
+export type SupportPriority = "low" | "medium" | "high";
+export type SupportUserRole = UserRole | "owner" | "unknown";
 
 export interface SupportEvent {
   id: string;
@@ -27,15 +35,21 @@ export interface SupportEvent {
 export interface SupportTicket {
   id: string;
   category: SupportCategory;
+  priority?: SupportPriority;
   triageReason?: string;
   message: string;
   includeActivity: boolean;
   session: UserSession;
+  userRole?: SupportUserRole;
   screen: string;
+  currentView?: string;
+  currentStudioId?: string;
+  currentDraftId?: string;
   relatedStudioSlug?: string;
   relatedBookingId?: string;
   relatedShortlistId?: string;
   events: SupportEvent[];
+  sessionEvents?: SupportEvent[];
   userAgent?: string;
   createdAt: string;
 }
@@ -258,6 +272,13 @@ export interface BookingIntent {
   status: BookingStatus;
   totalPrice: number;
   currency: City["currency"];
+  paymentMode?: "manual_at_studio" | "platform_payment";
+  paymentInstructions?: string;
+  price?: {
+    amount: number;
+    currency: City["currency"];
+    unit: "hour" | "booking";
+  };
   guestName: string;
   guestEmail: string;
   shootType: ShootType;
@@ -308,3 +329,42 @@ export interface ListingReviewItem {
 }
 
 export type ListingReviewDecision = "approve" | "reject";
+
+export interface OwnerMedia {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  publicUrl: string;
+  kind: "interior" | "equipment" | "sample" | "document";
+  sortOrder: number;
+}
+
+export interface OwnerOnboardingDraft {
+  id: string;
+  source: "web" | "telegram";
+  status: "collecting" | "draft_ready" | "email_pending" | "published";
+  ownerSessionToken?: string;
+  rawText: string;
+  studioName?: string;
+  city?: string;
+  description?: string;
+  suggestedAmenities: string[];
+  suggestedRules: string[];
+  suggestedRooms: Array<{
+    name: string;
+    styleTags: string[];
+    lightTags: string[];
+    props: string[];
+  }>;
+  media: OwnerMedia[];
+  missingFields: string[];
+}
+
+export interface PublishedStudioListing {
+  id: string;
+  draftId: string;
+  studioName: string;
+  city: string;
+  status: "published";
+  publicUrl?: string;
+}

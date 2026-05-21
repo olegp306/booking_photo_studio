@@ -2,9 +2,26 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createInMemoryOwnerRepository } from "./ownerRepository";
 import { buildServer } from "./server";
 
 describe("studio API", () => {
+  const multipartBody = (fields: Record<string, string>, file: { fieldName: string; fileName: string; mimeType: string; bytes: string }) => {
+    const boundary = "----studio-test-boundary";
+    const chunks = [
+      ...Object.entries(fields).map(([name, value]) =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+      ),
+      `--${boundary}\r\nContent-Disposition: form-data; name="${file.fieldName}"; filename="${file.fileName}"\r\nContent-Type: ${file.mimeType}\r\n\r\n${file.bytes}\r\n`,
+      `--${boundary}--\r\n`
+    ];
+
+    return {
+      body: chunks.join(""),
+      contentType: `multipart/form-data; boundary=${boundary}`
+    };
+  };
+
   it("returns health status", async () => {
     const server = buildServer();
     const response = await server.inject({ method: "GET", url: "/health" });
@@ -59,6 +76,394 @@ describe("studio API", () => {
     expect(JSON.stringify(response.json())).not.toContain("sk-");
   });
 
+  it("reports production onboarding readiness without exposing secrets", async () => {
+    const server = buildServer({
+      config: {
+        manualPaymentMode: true,
+        databaseUrl: "postgresql://db.example.com/photo",
+        resendApiKey: "re_test",
+        emailFrom: "Photo Studios <hello@example.com>",
+        r2Bucket: "photo-studios",
+        r2PublicBaseUrl: "https://media.example.com"
+      }
+    });
+
+    const response = await server.inject({ method: "GET", url: "/api/readiness" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      manualPaymentMode: true,
+      database: "configured",
+      email: "configured",
+      mediaStorage: "configured"
+    });
+    expect(JSON.stringify(response.json())).not.toContain("re_test");
+  });
+
+  it("does not treat placeholder database urls as production-ready", async () => {
+    const server = buildServer({
+      config: {
+        manualPaymentMode: true,
+        databaseUrl: "postgresql://USER:PASSWORD@HOST:5432/photo_studios",
+        resendApiKey: "re_test",
+        emailFrom: "Photo Studios <hello@example.com>",
+        r2Bucket: "photo-studios",
+        r2PublicBaseUrl: "https://media.example.com"
+      }
+    });
+
+    const response = await server.inject({ method: "GET", url: "/api/readiness" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        database: "missing",
+        nextSteps: expect.arrayContaining(["Fill DATABASE_URL for Prisma/PostgreSQL persistence."])
+      })
+    );
+  });
+
+  it("requests and verifies an owner email code", async () => {
+    const sent: Array<{ to: string; subject: string; html: string }> = [];
+    const server = buildServer({
+      services: {
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async (message) => {
+            sent.push({
+              to: message.to,
+              subject: `Code ${message.code}`,
+              html: `Keep access ${message.code}`
+            });
+            return { id: "email_1" };
+          }
+        }
+      }
+    });
+
+    const requestCode = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { ownerDraftId: "draft_1", email: "Owner@Example.com" }
+    });
+    expect(requestCode.statusCode).toBe(200);
+    expect(requestCode.json()).toMatchObject({ ok: true, email: "owner@example.com" });
+    expect(sent[0].to).toBe("owner@example.com");
+
+    const verify = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    expect(verify.statusCode).toBe(200);
+    expect(verify.json().session.emailVerified).toBe(true);
+
+    const reuse = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    expect(reuse.statusCode).toBe(400);
+  });
+
+  it("uploads owner media for a verified owner session", async () => {
+    const server = buildServer({
+      services: {
+        createOtpCode: () => "123456",
+        storage: {
+          uploadOwnerMedia: async (input) => ({
+            storageKey: `owners/${input.ownerId}/room.jpg`,
+            publicUrl: `https://media.example.com/owners/${input.ownerId}/room.jpg`
+          })
+        },
+        email: {
+          sendOwnerOtp: async () => ({ id: "email_1" })
+        }
+      }
+    });
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { email: "owner@example.com" }
+    });
+    const verify = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    const token = verify.json().session.ownerSessionToken;
+    const multipart = multipartBody(
+      { ownerSessionToken: token, draftId: "draft_1" },
+      { fieldName: "file", fileName: "room.jpg", mimeType: "image/jpeg", bytes: "image" }
+    );
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/owner/media",
+      headers: { "content-type": multipart.contentType },
+      payload: multipart.body
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().media).toMatchObject({
+      kind: "interior",
+      fileName: "room.jpg",
+      mimeType: "image/jpeg",
+      publicUrl: "https://media.example.com/owners/owner_1/room.jpg"
+    });
+  });
+
+  it("publishes owner drafts into the searchable catalog and booking path", async () => {
+    const server = buildServer({
+      services: {
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async () => ({ id: "email_1" })
+        },
+        storage: {
+          uploadOwnerMedia: async (input) => ({
+            storageKey: `owners/${input.ownerId}/${input.fileName}`,
+            publicUrl: `https://media.example.com/owners/${input.ownerId}/${input.fileName}`
+          })
+        }
+      }
+    });
+
+    const started = await server.inject({
+      method: "POST",
+      url: "/api/owner/onboarding/start",
+      payload: {
+        source: "web",
+        text: "Loft Karlin, Prague daylight cyclorama studio, 1200 CZK per hour, makeup station."
+      }
+    });
+    const draft = started.json().draft;
+    const multipart = multipartBody(
+      { ownerSessionToken: draft.ownerSessionToken, draftId: draft.id },
+      { fieldName: "file", fileName: "room.jpg", mimeType: "image/jpeg", bytes: "image" }
+    );
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/media",
+      headers: { "content-type": multipart.contentType },
+      payload: multipart.body
+    });
+
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { ownerDraftId: draft.id, email: "owner@example.com" }
+    });
+    const verified = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    const published = await server.inject({
+      method: "POST",
+      url: `/api/owner/onboarding/${draft.id}/publish`,
+      payload: { ownerSessionToken: verified.json().session.ownerSessionToken }
+    });
+
+    expect(published.statusCode).toBe(200);
+    expect(published.json().listing).toEqual(
+      expect.objectContaining({
+        studioName: "Loft Karlin",
+        city: "Prague",
+        status: "published",
+        publicUrl: expect.stringContaining("#studio/")
+      })
+    );
+
+    const studioSlug = published.json().listing.id;
+    const catalog = await server.inject({ method: "GET", url: "/studios?query=Loft%20Karlin" });
+    expect(catalog.json().studios).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: studioSlug,
+          name: "Loft Karlin",
+          priceFrom: 1200,
+          listingStatus: "published",
+          images: expect.arrayContaining([
+            expect.objectContaining({ url: "https://media.example.com/owners/owner_1/room.jpg" })
+          ])
+        })
+      ])
+    );
+
+    const booking = await server.inject({
+      method: "POST",
+      url: "/booking-requests",
+      payload: {
+        studioSlug,
+        roomId: `${studioSlug}-main`,
+        date: "2026-06-15",
+        startTime: "10:00",
+        durationHours: 2,
+        guestName: "Marta Client",
+        guestEmail: "marta@example.com",
+        shootType: "portrait",
+        message: "Two-hour portrait session."
+      }
+    });
+
+    expect(booking.statusCode).toBe(201);
+    expect(booking.json().booking).toEqual(
+      expect.objectContaining({
+        studioSlug,
+        totalPrice: 2400,
+        paymentMode: "manual_at_studio",
+        paymentInstructions: expect.stringContaining("pay the studio directly")
+      })
+    );
+  });
+
+  it("stores telegram photos in owner media storage and attaches them to the latest draft", async () => {
+    const ownerRepository = createInMemoryOwnerRepository();
+    const uploads: Array<{ ownerId: string; fileName: string; mimeType: string; bytes: Buffer }> = [];
+    const server = buildServer({
+      config: {
+        telegramBotToken: "telegram-test-token"
+      },
+      services: {
+        ownerRepository,
+        storage: {
+          async uploadOwnerMedia(input) {
+            uploads.push(input);
+            return {
+              storageKey: `owners/${input.ownerId}/${input.fileName}`,
+              publicUrl: `https://media.example.com/owners/${input.ownerId}/${input.fileName}`
+            };
+          }
+        }
+      },
+      fetch: async (url) => {
+        const target = String(url);
+        if (target.endsWith("/getFile")) {
+          return new Response(JSON.stringify({ ok: true, result: { file_path: "photos/room.jpg" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        if (target.includes("/file/bot")) {
+          return new Response("telegram-photo", { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    });
+
+    const draftResponse = await server.inject({
+      method: "POST",
+      url: "/api/telegram/webhook",
+      payload: {
+        message: {
+          from: { id: 3003, first_name: "Anna", username: "anna_studio" },
+          chat: { id: 3003, type: "private" },
+          text: "Daylight studio in Prague with cyclorama and makeup table."
+        }
+      }
+    });
+    expect(draftResponse.statusCode).toBe(200);
+
+    const photoResponse = await server.inject({
+      method: "POST",
+      url: "/api/telegram/webhook",
+      payload: {
+        message: {
+          from: { id: 3003, first_name: "Anna", username: "anna_studio" },
+          chat: { id: 3003, type: "private" },
+          photo: [{ file_id: "telegram_file_1", file_unique_id: "u1", width: 1280, height: 900, file_size: 2000 }]
+        }
+      }
+    });
+
+    expect(photoResponse.statusCode).toBe(200);
+    expect(uploads[0]).toEqual(
+      expect.objectContaining({
+        ownerId: "owner_1",
+        fileName: "telegram_file_1.jpg",
+        mimeType: "image/jpeg",
+        bytes: Buffer.from("telegram-photo")
+      })
+    );
+
+    const draft = await ownerRepository.getDraft("draft_1");
+    expect(await ownerRepository.getDraftMedia(draft?.id ?? "")).toEqual([
+      expect.objectContaining({
+        fileName: "telegram_file_1.jpg",
+        publicUrl: "https://media.example.com/owners/owner_1/telegram_file_1.jpg"
+      })
+    ]);
+  });
+
+  it("rejects unsupported owner media MIME types", async () => {
+    const server = buildServer({
+      services: {
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async () => ({ id: "email_1" })
+        }
+      }
+    });
+    await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { email: "owner@example.com" }
+    });
+    const verify = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes/verify",
+      payload: { email: "owner@example.com", code: "123456" }
+    });
+    const multipart = multipartBody(
+      { ownerSessionToken: verify.json().session.ownerSessionToken, draftId: "draft_1" },
+      { fieldName: "file", fileName: "notes.txt", mimeType: "text/plain", bytes: "not-image" }
+    );
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/owner/media",
+      headers: { "content-type": multipart.contentType },
+      payload: multipart.body
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("UNSUPPORTED_OWNER_MEDIA_TYPE");
+  });
+
+  it("starts and updates a shared owner onboarding draft", async () => {
+    const server = buildServer();
+    const start = await server.inject({
+      method: "POST",
+      url: "/api/owner/onboarding/start",
+      payload: {
+        source: "web",
+        text: "Karlin daylight loft with cyclorama and makeup table."
+      }
+    });
+
+    expect(start.statusCode).toBe(200);
+    expect(start.json().draft).toEqual(
+      expect.objectContaining({
+        source: "web",
+        status: "draft_ready",
+        ownerSessionToken: expect.any(String),
+        missingFields: expect.arrayContaining(["price"])
+      })
+    );
+
+    const message = await server.inject({
+      method: "POST",
+      url: `/api/owner/onboarding/${start.json().draft.id}/messages`,
+      payload: { text: "Price starts at 850 CZK per hour." }
+    });
+    expect(message.statusCode).toBe(200);
+    expect(message.json().draft.rawText).toContain("850 CZK");
+  });
+
   it("creates listing drafts through the AI endpoint with a local fallback", async () => {
     const server = buildServer({
       config: {
@@ -93,7 +498,7 @@ describe("studio API", () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({
       config: {
-        openaiApiKey: "sk-test-openai",
+        openaiApiKey: "test-openai-key",
         openaiListingModel: "gpt-test-listing"
       },
       fetch: async (url, init) => {
@@ -138,7 +543,7 @@ describe("studio API", () => {
     expect(requests[0].url).toBe("https://api.openai.com/v1/responses");
     expect(requests[0].init?.headers).toEqual(
       expect.objectContaining({
-        Authorization: "Bearer sk-test-openai"
+        Authorization: "Bearer test-openai-key"
       })
     );
     expect(JSON.parse(String(requests[0].init?.body))).toEqual(
@@ -213,7 +618,7 @@ describe("studio API", () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const server = buildServer({
       config: {
-        openaiApiKey: "sk-test-openai",
+        openaiApiKey: "test-openai-key",
         openaiListingModel: "gpt-test-media"
       },
       fetch: async (url, init) => {
@@ -254,7 +659,7 @@ describe("studio API", () => {
     expect(requests[0].url).toBe("https://api.openai.com/v1/responses");
     expect(requests[0].init?.headers).toEqual(
       expect.objectContaining({
-        Authorization: "Bearer sk-test-openai"
+        Authorization: "Bearer test-openai-key"
       })
     );
     expect(JSON.parse(String(requests[0].init?.body))).toEqual(
@@ -575,6 +980,86 @@ describe("studio API", () => {
     );
   });
 
+  it("stores AI-ready support context for owner onboarding issues", async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/support/tickets",
+      payload: {
+        message: "Photo upload is broken while creating my studio draft.",
+        includeActivity: true,
+        userRole: "owner",
+        currentView: "owner-onboarding-drawer",
+        currentStudioId: "studio-lumen-karlin",
+        currentDraftId: "draft-42",
+        sessionEvents: [
+          {
+            id: "event-1",
+            type: "owner_draft_photo_failed",
+            label: "Owner photo upload failed",
+            createdAt: "2026-05-21T10:00:00.000Z",
+            metadata: {
+              draftId: "draft-42"
+            }
+          }
+        ],
+        userAgent: "vitest"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().ticket).toEqual(
+      expect.objectContaining({
+        category: "owner_onboarding",
+        priority: "high",
+        userRole: "owner",
+        currentView: "owner-onboarding-drawer",
+        currentStudioId: "studio-lumen-karlin",
+        currentDraftId: "draft-42",
+        sessionEvents: [
+          expect.objectContaining({
+            type: "owner_draft_photo_failed"
+          })
+        ]
+      })
+    );
+  });
+
+  it("rate limits repeated support ticket submissions", async () => {
+    const server = buildServer();
+
+    for (let index = 0; index < 20; index += 1) {
+      const response = await server.inject({
+        method: "POST",
+        url: "/support/tickets",
+        headers: { "user-agent": "rate-limit-test" },
+        payload: {
+          message: `Support message ${index}`,
+          includeActivity: false,
+          screen: "#support",
+          events: []
+        }
+      });
+      expect(response.statusCode).toBe(201);
+    }
+
+    const limited = await server.inject({
+      method: "POST",
+      url: "/support/tickets",
+      headers: { "user-agent": "rate-limit-test" },
+      payload: {
+        message: "One more support message",
+        includeActivity: false,
+        screen: "#support",
+        events: []
+      }
+    });
+
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error).toBe("RATE_LIMITED");
+  });
+
   it("persists support tickets across API restarts", async () => {
     const localDataDir = mkdtempSync(join(tmpdir(), "studio-support-"));
     const server = buildServer({
@@ -816,6 +1301,64 @@ describe("studio API", () => {
     expect(JSON.stringify(response.json().studio)).not.toContain("accessNotes");
     expect(JSON.stringify(response.json().studio)).not.toContain("cancellationPolicy");
     expect(JSON.stringify(response.json().studio)).not.toContain("listingStatus");
+  });
+
+  it("returns a public-safe API studio payload for production links", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "GET",
+      url: "/api/studios/studio-lumen-karlin"
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.stringify(response.json().studio);
+    expect(response.json().studio).toEqual(
+      expect.objectContaining({
+        slug: "studio-lumen-karlin",
+        name: "Studio Lumen Karlin"
+      })
+    );
+    expect(body).not.toContain("ownerName");
+    expect(body).not.toContain("accessNotes");
+    expect(body).not.toContain("cancellationPolicy");
+    expect(body).not.toContain("listingStatus");
+    expect(body).not.toContain("@");
+    expect(body).not.toContain("telegramUserId");
+    expect(body).not.toContain("storageKey");
+  });
+
+  it("returns paginated public-safe studio explore results", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "GET",
+      url: "/api/studios?limit=1"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        total: 3,
+        nextCursor: "1",
+        studios: [
+          expect.objectContaining({
+            slug: "studio-lumen-karlin"
+          })
+        ]
+      })
+    );
+    expect(JSON.stringify(response.json())).not.toContain("ownerName");
+  });
+
+  it("serves a conservative robots policy before launch review", async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: "GET",
+      url: "/robots.txt"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("User-agent: *");
+    expect(response.body).toContain("Disallow: /");
   });
 
   it("tracks public studio detail access metrics", async () => {
@@ -1196,7 +1739,13 @@ describe("studio API", () => {
     });
 
     expect(approved.statusCode).toBe(200);
-    expect(approved.json().booking.status).toBe("awaiting_payment");
+    expect(approved.json().booking).toEqual(
+      expect.objectContaining({
+        status: "confirmed",
+        paymentMode: "manual_at_studio",
+        paymentInstructions: expect.stringContaining("pay the studio directly")
+      })
+    );
   });
 
   it("persists booking requests and status updates across API restarts", async () => {
@@ -1245,7 +1794,8 @@ describe("studio API", () => {
     expect(loaded.json().bookings).toEqual([
       expect.objectContaining({
         id: bookingId,
-        status: "awaiting_payment",
+        status: "confirmed",
+        paymentMode: "manual_at_studio",
         ownerNote: "Approved for the product corner."
       })
     ]);
@@ -1491,7 +2041,7 @@ describe("studio API", () => {
     );
   });
 
-  it("confirms a booking after customer payment", async () => {
+  it("creates instant bookings as confirmed with direct studio payment instructions", async () => {
     const server = buildServer();
     const created = await server.inject({
       method: "POST",
@@ -1508,15 +2058,19 @@ describe("studio API", () => {
         message: "Small portrait session"
       }
     });
-    const bookingId = created.json().booking.id;
 
-    const paid = await server.inject({
-      method: "POST",
-      url: `/bookings/${bookingId}/payment`
-    });
-
-    expect(paid.statusCode).toBe(200);
-    expect(paid.json().booking.status).toBe("confirmed");
+    expect(created.statusCode).toBe(201);
+    expect(created.json().booking).toEqual(
+      expect.objectContaining({
+        status: "confirmed",
+        paymentMode: "manual_at_studio",
+        price: {
+          amount: 2600,
+          currency: "CZK",
+          unit: "booking"
+        }
+      })
+    );
 
     const customerBookings = await server.inject({
       method: "GET",

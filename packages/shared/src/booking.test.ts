@@ -33,7 +33,7 @@ describe("booking domain", () => {
     );
   });
 
-  it("creates awaiting payment intent for instant-booking rooms", () => {
+  it("creates confirmed direct-payment intent for instant-booking rooms", () => {
     const intent = createBookingIntent(lumen, {
       roomId: "lumen-main",
       date: "2026-06-12",
@@ -45,7 +45,7 @@ describe("booking domain", () => {
       message: "Small portrait session"
     });
 
-    expect(intent.status).toBe("awaiting_payment");
+    expect(intent.status).toBe("confirmed");
     expect(intent.bookingMode).toBe("instant");
     expect(intent.totalPrice).toBe(2600);
   });
@@ -82,7 +82,7 @@ describe("booking domain", () => {
     ).toThrow("Room was not found");
   });
 
-  it("moves approved request bookings into payment collection", () => {
+  it("moves approved request bookings into direct-payment confirmation", () => {
     const intent = createBookingIntent(lumen, {
       roomId: "lumen-product",
       date: "2026-06-12",
@@ -96,7 +96,7 @@ describe("booking domain", () => {
 
     const approved = decideBookingIntent(intent, "approve");
 
-    expect(approved.status).toBe("awaiting_payment");
+    expect(approved.status).toBe("confirmed");
   });
 
   it("declines request bookings with an owner note", () => {
@@ -129,7 +129,8 @@ describe("booking domain", () => {
       message: "Small portrait session"
     });
 
-    const confirmed = markBookingPaid(intent);
+    const awaitingPayment = { ...intent, status: "awaiting_payment" as const };
+    const confirmed = markBookingPaid(awaitingPayment);
 
     expect(confirmed.status).toBe("confirmed");
   });
@@ -145,9 +146,7 @@ describe("booking domain", () => {
       shootType: "portrait",
       message: "Small portrait session"
     });
-    const confirmed = markBookingPaid(intent);
-
-    const completed = markBookingCompleted(confirmed);
+    const completed = markBookingCompleted(intent);
 
     expect(completed.status).toBe("completed");
   });

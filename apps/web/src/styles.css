@@ -92,6 +92,132 @@ h2 {
   height: 42px;
 }
 
+.owner-fab,
+.support-fab {
+  position: fixed;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid #191714;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(36, 26, 18, 0.16);
+  font-weight: 800;
+}
+
+.owner-fab {
+  left: max(14px, calc(50% - 246px));
+  bottom: 94px;
+  gap: 7px;
+  max-width: 170px;
+  padding: 0 14px;
+  background: #191714;
+  color: #fff;
+}
+
+.support-fab {
+  right: max(14px, calc(50% - 246px));
+  bottom: 94px;
+  padding: 0 16px;
+  background: #fff;
+}
+
+.owner-drawer,
+.support-drawer {
+  position: fixed;
+  right: max(12px, calc(50% - 248px));
+  bottom: 148px;
+  z-index: 40;
+  width: min(496px, calc(100vw - 24px));
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fffaf4;
+  box-shadow: 0 24px 70px rgba(25, 23, 20, 0.24);
+}
+
+.owner-drawer {
+  left: max(12px, calc(50% - 248px));
+  right: auto;
+}
+
+.owner-drawer-head {
+  padding: 6px 16px 0;
+}
+
+.owner-chat-form,
+.owner-email-form,
+.support-form {
+  display: grid;
+  gap: 12px;
+}
+
+.owner-chat-form,
+.owner-draft-preview,
+.owner-email-step {
+  padding: 0 16px 16px;
+}
+
+.owner-chat-form textarea,
+.support-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.owner-chat-form textarea,
+.owner-chat-form input,
+.owner-email-form input,
+.support-form textarea {
+  width: 100%;
+  margin-top: 7px;
+  border: 1px solid #eadfd2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 11px 12px;
+}
+
+.owner-photo-list,
+.owner-draft-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.owner-photo-list span,
+.owner-draft-tags span {
+  border: 1px solid #eadfd2;
+  border-radius: 999px;
+  background: #fff;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.owner-draft-preview {
+  border-top: 1px solid #eadfd2;
+}
+
+.owner-draft-preview h3 {
+  margin-bottom: 6px;
+}
+
+.owner-email-step {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #eadfd2;
+}
+
+.owner-published-link {
+  justify-content: center;
+  text-decoration: none;
+}
+
+.owner-email-form {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
 .account-switcher {
   display: grid;
   gap: 8px;

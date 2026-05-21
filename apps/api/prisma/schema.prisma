@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String              @id @default(cuid())
+  email          String?             @unique
+  emailVerified  DateTime?
+  displayName    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  ownerProfile   OwnerProfile?
+  telegramLinks  TelegramIdentity[]
+  emailCodes     EmailOtpChallenge[]
+}
+
+model OwnerProfile {
+  id          String                  @id @default(cuid())
+  userId      String                  @unique
+  status      String                  @default("draft")
+  studioName  String?
+  city        String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drafts      OwnerOnboardingDraft[]
+  media       OwnerMedia[]
+}
+
+model TelegramIdentity {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  telegramUserId String   @unique
+  username       String?
+  firstName      String?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailOtpChallenge {
+  id          String    @id @default(cuid())
+  userId      String?
+  email       String
+  codeHash    String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, expiresAt])
+}
+
+model OwnerOnboardingDraft {
+  id             String       @id @default(cuid())
+  ownerProfileId String
+  source         String
+  status         String       @default("collecting")
+  rawText        String       @default("")
+  aiDraftJson    Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  ownerProfile   OwnerProfile @relation(fields: [ownerProfileId], references: [id], onDelete: Cascade)
+  media          OwnerMedia[]
+}
+
+model OwnerMedia {
+  id             String                 @id @default(cuid())
+  ownerProfileId String
+  draftId        String?
+  kind           String
+  fileName       String
+  mimeType       String
+  storageKey     String                 @unique
+  publicUrl      String
+  sortOrder      Int                    @default(0)
+  aiTagsJson     Json?
+  createdAt      DateTime               @default(now())
+  ownerProfile   OwnerProfile           @relation(fields: [ownerProfileId], references: [id], onDelete: Cascade)
+  draft          OwnerOnboardingDraft?  @relation(fields: [draftId], references: [id], onDelete: SetNull)
+}
