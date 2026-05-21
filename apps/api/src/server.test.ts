@@ -166,6 +166,32 @@ describe("studio API", () => {
     expect(reuse.statusCode).toBe(400);
   });
 
+  it("returns a safe email sender error when owner email delivery fails", async () => {
+    const server = buildServer({
+      services: {
+        createOtpCode: () => "123456",
+        email: {
+          sendOwnerOtp: async () => {
+            throw new Error("Domain bookphotostudio.org is not verified in Resend");
+          }
+        }
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/owner/email-codes",
+      payload: { ownerDraftId: "draft_1", email: "owner@example.com" }
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      error: "EMAIL_SEND_FAILED",
+      message: "Email sender rejected the access code. Check the verified sender domain in Resend."
+    });
+    expect(JSON.stringify(response.json())).not.toContain("bookphotostudio.org");
+  });
+
   it("uploads owner media for a verified owner session", async () => {
     const server = buildServer({
       services: {
