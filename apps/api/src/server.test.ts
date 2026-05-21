@@ -812,7 +812,7 @@ describe("studio API", () => {
       expect.objectContaining({
         mode: "local-fallback",
         draft: expect.objectContaining({
-          tagline: "Soft daylight studio for fashion and product shoots.",
+          tagline: "Soft Daylight Studio.",
           shootTypes: ["fashion", "product"],
           featureIds: expect.arrayContaining(["natural-light", "cyclorama"]),
           equipmentIds: expect.arrayContaining(["softboxes", "c-stands"]),
@@ -820,6 +820,63 @@ describe("studio API", () => {
         })
       })
     );
+  });
+
+  it("uses OpenAI to create clean owner draft titles and distribute listing facts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const server = buildServer({
+      config: {
+        openaiApiKey: "test-openai-key",
+        openaiListingModel: "gpt-test-owner-draft"
+      },
+      fetch: async (url, init) => {
+        requests.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              studioName: "Karlin Sun Loft",
+              city: "Prague",
+              description: "Daylight loft in Karlin with cyclorama, makeup station, and rates from 1300 CZK per hour.",
+              suggestedAmenities: ["natural-light", "cyclorama", "softboxes", "makeup-station", "wifi"],
+              suggestedRules: ["Minimum booking is 2 hours.", "Rate is 1300 CZK per hour."],
+              suggestedRooms: [{
+                name: "Main Daylight Room",
+                styleTags: ["loft", "clean"],
+                lightTags: ["daylight", "large windows"],
+                props: ["cyclorama", "makeup station"]
+              }]
+            })
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/owner/onboarding/start",
+      payload: {
+        source: "web",
+        text: "Photos and price list for Karlin daylight loft: 1300 CZK per hour, minimum booking 2 hours, cyclorama, softboxes, makeup station, wifi."
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().draft).toEqual(
+      expect.objectContaining({
+        studioName: "Karlin Sun Loft",
+        city: "Prague",
+        description: expect.stringContaining("1300 CZK per hour"),
+        suggestedAmenities: expect.arrayContaining(["natural-light", "cyclorama", "softboxes"]),
+        suggestedRules: expect.arrayContaining(["Minimum booking is 2 hours."]),
+        suggestedRooms: [expect.objectContaining({ name: "Main Daylight Room" })]
+      })
+    );
+    expect(response.json().draft.studioName).not.toContain("1300");
+    const body = JSON.parse(String(requests[0].init?.body));
+    expect(body.text.format.name).toBe("owner_photo_studio_draft");
+    expect(body.input[0].content).toContain("The studioName is the listing title");
+    expect(body.input[0].content).toContain("Do not lose facts that do not belong in studioName");
   });
 
   it("uses OpenAI for listing drafts when an API key is configured", async () => {

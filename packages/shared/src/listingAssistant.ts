@@ -14,13 +14,33 @@ const matchAny = (text: string, keywords: string[]) => keywords.some((keyword) =
 
 const firstSentence = (text: string) => text.split(/[.!?]/).map((part) => part.trim()).filter(Boolean)[0] ?? text;
 
+const cleanTitleText = (value: string) =>
+  value
+    .replace(/\b\d[\d\s.,]*(czk|kč|eur|€|usd|\$)\b/gi, "")
+    .replace(/\b(per|\/)\s*(hour|hr|day)\b/gi, "")
+    .replace(/\b(minimum booking|deposit|cancellation|included|available|rules?)\b.*$/i, "")
+    .replace(/[.;:]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const titleCaseSentence = (value: string) => {
-  const clean = value
+  const explicitName = value.match(/\b(?:studio|space|loft|atelier)\s+(?:name\s+)?(?:is|called)\s+([A-Z0-9][^.\n,;:]{1,60})/i)
+    ?? value.match(/\b(?:called|named)\s+([A-Z0-9][^.\n,;:]{1,60})/i);
+  const clean = cleanTitleText(explicitName?.[1] ?? value)
     .replace(/^we have an?\s+/i, "")
     .replace(/^there is an?\s+/i, "")
+    .replace(/^this is an?\s+/i, "")
+    .split(",")[0]
     .split(/\s+with\s+/i)[0]
+    .split(/\s+for\s+/i)[0]
     .trim();
-  return clean ? `${clean.charAt(0).toUpperCase()}${clean.slice(1)}.` : "";
+  const title = clean
+    .split(/\s+/)
+    .filter((word) => !/^(with|and|for|including|prices?|price|from)$/i.test(word))
+    .slice(0, 6)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+  return title ? `${title}.` : "";
 };
 
 export const draftListingFromTranscript = (transcript: string): ListingDraft => {

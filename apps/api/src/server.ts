@@ -43,7 +43,7 @@ import {
   type UserRole,
   type UserSession
 } from "@studio-market/shared";
-import { generateListingDraft, type FetchLike } from "./aiListing";
+import { generateListingDraft, generateOwnerListingDraft, type FetchLike } from "./aiListing";
 import { extractOwnerMediaFacts, suggestMediaDetails } from "./aiMedia";
 import { getLaunchReadiness, getProductionOnboardingReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
 import { createJsonResourceStore } from "./jsonResourceStore";
@@ -312,28 +312,14 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     repository: ownerRepository,
     ai: {
       async createListingDraft(text) {
-        const result = await generateListingDraft(text, config, fetchImpl);
-        return {
-          description: result.draft.description || result.draft.tagline,
-          suggestedAmenities: result.draft.amenityIds,
-          suggestedRules: result.draft.rules,
-          suggestedRooms: []
-        };
+        return (await generateOwnerListingDraft(text, config, fetchImpl)).draft;
       }
     }
   });
   const latestTelegramDraftByUser = new Map<string, string>();
   const createAiDraft = async (text: string) => {
     try {
-      const result = await generateListingDraft(text, config, fetchImpl);
-      return {
-        studioName: undefined,
-        city: undefined,
-        description: result.draft.description || result.draft.tagline,
-        suggestedAmenities: result.draft.amenityIds,
-        suggestedRules: result.draft.rules,
-        suggestedRooms: []
-      };
+      return (await generateOwnerListingDraft(text, config, fetchImpl)).draft;
     } catch {
       return {
         description: text,
