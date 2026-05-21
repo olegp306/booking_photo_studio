@@ -727,8 +727,8 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
       await requestOwnerEmailCode({ draftId: draft.id, email: email.trim() });
       setEmailRequested(true);
       setStatus("Email code sent.");
-    } catch {
-      setStatus("Could not send email code. Check the email sender settings and try again.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not send email code. Check the email sender settings and try again.");
     }
   };
 

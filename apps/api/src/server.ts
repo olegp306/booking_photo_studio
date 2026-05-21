@@ -670,7 +670,14 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       codeHash: await hashOtpCode(code),
       expiresAt: createOtpExpiry()
     });
-    await emailService.sendOwnerOtp({ to: email, code });
+    try {
+      await emailService.sendOwnerOtp({ to: email, code });
+    } catch {
+      return reply.code(502).send({
+        error: "EMAIL_SEND_FAILED",
+        message: "Email sender rejected the access code. Check the verified sender domain in Resend."
+      });
+    }
 
     return {
       ok: true,

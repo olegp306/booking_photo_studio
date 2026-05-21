@@ -367,8 +367,11 @@ describe("App", () => {
             headers: { "Content-Type": "application/json" }
           });
         }
-        return new Response(JSON.stringify({ error: "EMAIL_DOMAIN_NOT_VERIFIED" }), {
-          status: 500,
+        return new Response(JSON.stringify({
+          error: "EMAIL_SEND_FAILED",
+          message: "Email sender rejected the access code. Check the verified sender domain in Resend."
+        }), {
+          status: 502,
           headers: { "Content-Type": "application/json" }
         });
       }
@@ -396,7 +399,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Email"), "owner@example.com");
     await user.click(screen.getByRole("button", { name: /send code/i }));
 
-    expect(await screen.findByText(/could not send email code/i)).toBeInTheDocument();
+    expect(await screen.findByText(/verified sender domain in resend/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /send code/i }));
     expect(await screen.findByText(/email code sent/i)).toBeInTheDocument();

@@ -527,7 +527,10 @@ export async function requestOwnerEmailCode(input: { draftId: string; email: str
     },
     body: JSON.stringify({ ownerDraftId: input.draftId, email: input.email })
   });
-  if (!response.ok) throw new Error("Failed to request owner email code");
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined) as { message?: string } | undefined;
+    throw new Error(payload?.message ?? "Failed to request owner email code");
+  }
   return (await response.json()) as { ok: true; email: string };
 }
 
