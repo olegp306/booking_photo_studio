@@ -58,7 +58,7 @@ export const createBookingIntent = (
     throw new Error("Duration must be at least 1 hour");
   }
 
-  const status = room.bookingMode === "instant" ? "awaiting_payment" : "pending_owner_approval";
+  const status = room.bookingMode === "instant" ? "confirmed" : "pending_owner_approval";
 
   return {
     id: makeId([studio.slug, room.id, request.date, request.startTime, request.guestEmail]),
@@ -91,7 +91,7 @@ export const decideBookingIntent = (
 
   return {
     ...booking,
-    status: decision === "approve" ? "awaiting_payment" : "declined",
+    status: decision === "approve" ? "confirmed" : "declined",
     ownerNote
   };
 };

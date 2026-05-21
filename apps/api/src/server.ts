@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 import {
   applyStudioReview,
@@ -33,7 +34,9 @@ import {
   type Studio,
   type SupportCategory,
   type SupportEvent,
+  type SupportPriority,
   type SupportTicket,
+  type SupportUserRole,
   type StudioReview,
   type StudioReviewRequest,
   type StudioSearchFilters,
@@ -42,15 +45,35 @@ import {
 } from "@studio-market/shared";
 import { generateListingDraft, type FetchLike } from "./aiListing";
 import { suggestMediaDetails } from "./aiMedia";
-import { getLaunchReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
+import { getLaunchReadiness, getProductionOnboardingReadiness, loadRuntimeConfig, type RuntimeConfig } from "./env";
 import { createJsonResourceStore } from "./jsonResourceStore";
 import { createListingDraftStore } from "./listingDraftStore";
 import {
+  createOwnerSessionToken,
+  createOtpExpiry,
+  createSixDigitCode,
+  hashOtpCode,
+  normalizeEmail,
+  parseOwnerSessionToken,
+  verifyOtpCode
+} from "./auth";
+import { createEmailService, createResendEmailService, type EmailService } from "./email";
+import {
+  createInMemoryOwnerRepository,
+  type OwnerRepository,
+  type OwnerSession as OwnerRepositorySession
+} from "./ownerRepository";
+import { createOwnerOnboardingService } from "./ownerOnboarding";
+import { getPaymentInstructions, getPaymentMode, type PaymentMode } from "./paymentMode";
+import { createR2StorageService, createStorageService, type StorageService } from "./storage";
+import {
   extractTelegramChatId,
   extractTelegramText,
+  createTelegramBotHandler,
   isTelegramSecretValid,
   registerTelegramListingDraftWebhook,
   sendTelegramListingDraftReply,
+  type TelegramOwnerServices,
 } from "./telegram";
 
 const toArray = <T extends string>(value: string | string[] | undefined): T[] | undefined => {
@@ -75,11 +98,24 @@ const supportCategories: SupportCategory[] = [
   "payment",
   "owner_listing",
   "idea",
-  "bug"
+  "bug",
+  "feature_request",
+  "bug_report",
+  "listing_quality",
+  "owner_onboarding",
+  "other"
 ];
 
 const isSupportCategory = (category: unknown): category is SupportCategory =>
   typeof category === "string" && supportCategories.includes(category as SupportCategory);
+
+const supportPriorities: SupportPriority[] = ["low", "medium", "high"];
+const isSupportPriority = (priority: unknown): priority is SupportPriority =>
+  typeof priority === "string" && supportPriorities.includes(priority as SupportPriority);
+
+const supportUserRoles: SupportUserRole[] = ["client", "photographer", "studio_owner", "admin", "owner", "unknown"];
+const isSupportUserRole = (role: unknown): role is SupportUserRole =>
+  typeof role === "string" && supportUserRoles.includes(role as SupportUserRole);
 
 const referralSources: ReferralSource[] = ["telegram", "photographer", "studio_owner", "direct", "unknown"];
 const isReferralSource = (source: unknown): source is ReferralSource =>
@@ -87,53 +123,284 @@ const isReferralSource = (source: unknown): source is ReferralSource =>
 
 const referralSourceLabels = Object.fromEntries(referralSources.map((source) => [source, 0])) as ReferralSourceTotals;
 
-const triageSupportTicket = (message: string): { category: SupportCategory; triageReason: string } => {
+const triageSupportTicket = (message: string): { category: SupportCategory; priority: SupportPriority; triageReason: string } => {
   const normalized = message.toLowerCase();
+  if (
+    normalized.includes("owner") ||
+    normalized.includes("studio profile") ||
+    normalized.includes("draft") ||
+    normalized.includes("email code") ||
+    normalized.includes("photo upload")
+  ) {
+    return {
+      category: "owner_onboarding",
+      priority: normalized.includes("broken") || normalized.includes("failed") || normalized.includes("error") ? "high" : "medium",
+      triageReason: "Matched owner onboarding or draft creation words in the support message."
+    };
+  }
   if (normalized.includes("payment") || normalized.includes("paid") || normalized.includes("stripe")) {
     return {
       category: "payment",
+      priority: "medium",
       triageReason: "Matched payment-related words in the support message."
     };
   }
   if (normalized.includes("bug") || normalized.includes("broken") || normalized.includes("error")) {
     return {
-      category: "bug",
+      category: "bug_report",
+      priority: "high",
       triageReason: "Matched bug or error words in the support message."
     };
   }
-  if (normalized.includes("listing") || normalized.includes("owner") || normalized.includes("studio profile")) {
+  if (normalized.includes("wrong") || normalized.includes("address") || normalized.includes("photo") || normalized.includes("listing")) {
     return {
-      category: "owner_listing",
-      triageReason: "Matched owner listing words in the support message."
-    };
-  }
-  if (normalized.includes("wrong") || normalized.includes("address") || normalized.includes("photo")) {
-    return {
-      category: "studio_info_wrong",
+      category: "listing_quality",
+      priority: "medium",
       triageReason: "Matched studio information correction words in the support message."
     };
   }
   if (normalized.includes("booking") || normalized.includes("slot") || normalized.includes("confirmed")) {
     return {
       category: "booking_issue",
+      priority: "medium",
       triageReason: "Matched booking or slot words in the support message."
+    };
+  }
+  if (normalized.includes("feature") || normalized.includes("add") || normalized.includes("idea")) {
+    return {
+      category: "feature_request",
+      priority: "low",
+      triageReason: "Matched product feedback words in the support message."
     };
   }
 
   return {
-    category: "idea",
-    triageReason: "No operational issue keywords matched, so this is treated as product feedback."
+    category: "other",
+    priority: "low",
+    triageReason: "No operational issue keywords matched, so this is kept for manual review."
   };
 };
 
 interface BuildServerOptions {
   config?: Partial<RuntimeConfig>;
   fetch?: FetchLike;
+  services?: Partial<OwnerServices>;
 }
+
+interface OwnerServices {
+  createOtpCode: () => string;
+  email: EmailService;
+  ownerRepository: OwnerRepository;
+  storage: StorageService;
+  telegramOwner: TelegramOwnerServices;
+}
+
+interface EmailOtpChallengeRecord {
+  id: string;
+  userId: string;
+  email: string;
+  codeHash: string;
+  expiresAt: Date;
+  consumedAt?: Date;
+}
+
+const toOwnerSessionResponse = (session: OwnerRepositorySession, ownerSessionToken?: string) => ({
+  userId: session.user.id,
+  ownerProfileId: session.ownerProfile.id,
+  email: session.user.email,
+  emailVerified: Boolean(session.user.emailVerified),
+  ownerSessionToken
+});
+
+const allowedOwnerImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
+const maxOwnerMediaBytes = 20 * 1024 * 1024;
+const withPaymentDetails = (booking: BookingIntent, paymentMode: PaymentMode): BookingIntent => ({
+  ...booking,
+  paymentMode,
+  paymentInstructions: getPaymentInstructions(paymentMode),
+  price: {
+    amount: booking.totalPrice,
+    currency: booking.currency,
+    unit: "booking"
+  }
+});
+
+const createRateLimiter = () => {
+  const buckets = new Map<string, { count: number; resetAt: number }>();
+
+  return (scope: string, key: string, limit: number, windowMs: number) => {
+    const now = Date.now();
+    const bucketKey = `${scope}:${key}`;
+    const bucket = buckets.get(bucketKey);
+    if (!bucket || bucket.resetAt <= now) {
+      buckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (bucket.count >= limit) return false;
+    bucket.count += 1;
+    return true;
+  };
+};
 
 export const buildServer = (options: BuildServerOptions = {}) => {
   const config = loadRuntimeConfig(options.config);
   const fetchImpl = options.fetch ?? fetch;
+  const ownerRepository = options.services?.ownerRepository ?? createInMemoryOwnerRepository();
+  const emailService = options.services?.email ?? (
+    config.resendApiKey && config.emailFrom
+      ? createResendEmailService({ apiKey: config.resendApiKey, from: config.emailFrom })
+      : createEmailService({
+          async send() {
+            return { id: "email_disabled" };
+          }
+        })
+  );
+  const storageService = options.services?.storage ?? (
+    config.r2AccountId && config.r2AccessKeyId && config.r2SecretAccessKey && config.r2Bucket && config.r2PublicBaseUrl
+      ? createR2StorageService({
+          accountId: config.r2AccountId,
+          accessKeyId: config.r2AccessKeyId,
+          secretAccessKey: config.r2SecretAccessKey,
+          bucket: config.r2Bucket,
+          publicBaseUrl: config.r2PublicBaseUrl
+        })
+      : createStorageService({
+          publicBaseUrl: config.r2PublicBaseUrl ?? "https://media.local",
+          async putObject() {
+            return undefined;
+          }
+        })
+  );
+  const createOtpCode = options.services?.createOtpCode ?? createSixDigitCode;
+  const paymentMode = getPaymentMode({ manualPaymentMode: config.manualPaymentMode === true });
+  const allowRequest = createRateLimiter();
+  const rateLimitKey = (request: { headers: Record<string, unknown>; ip?: string }) =>
+    String(request.headers["x-forwarded-for"] ?? request.headers["user-agent"] ?? request.ip ?? "anonymous");
+  const ownerOnboardingService = createOwnerOnboardingService({
+    repository: ownerRepository,
+    ai: {
+      async createListingDraft(text) {
+        const result = await generateListingDraft(text, config, fetchImpl);
+        return {
+          description: result.draft.description || result.draft.tagline,
+          suggestedAmenities: result.draft.amenityIds,
+          suggestedRules: result.draft.rules,
+          suggestedRooms: []
+        };
+      }
+    }
+  });
+  const latestTelegramDraftByUser = new Map<string, string>();
+  const createAiDraft = async (text: string) => {
+    try {
+      const result = await generateListingDraft(text, config, fetchImpl);
+      return {
+        studioName: undefined,
+        city: undefined,
+        description: result.draft.description || result.draft.tagline,
+        suggestedAmenities: result.draft.amenityIds,
+        suggestedRules: result.draft.rules,
+        suggestedRooms: []
+      };
+    } catch {
+      return {
+        description: text,
+        suggestedAmenities: [],
+        suggestedRules: [],
+        suggestedRooms: []
+      };
+    }
+  };
+  const telegramOwnerServices = options.services?.telegramOwner ?? {
+    async createDraftFromTelegram(input) {
+      const owner = await ownerRepository.findOrCreateOwnerByTelegram({
+        telegramUserId: input.telegramUserId,
+        username: input.username,
+        firstName: input.firstName
+      });
+      const draft = await ownerRepository.createDraft({
+        ownerProfileId: owner.ownerProfile.id,
+        source: "telegram",
+        rawText: input.text
+      });
+      const aiDraft = await createAiDraft(draft.rawText);
+      const saved = await ownerRepository.saveAiDraft({
+        draftId: draft.id,
+        aiDraftJson: aiDraft,
+        status: "draft_ready"
+      });
+      latestTelegramDraftByUser.set(input.telegramUserId, saved.id);
+
+      return {
+        id: saved.id,
+        studioName: aiDraft.studioName,
+        city: aiDraft.city,
+        missingFields: [
+          !aiDraft.studioName && "studioName",
+          !aiDraft.city && "city",
+          !aiDraft.description && "description",
+          "price"
+        ].filter(Boolean) as string[]
+      };
+    },
+    async attachTelegramPhoto(input) {
+      const owner = await ownerRepository.findOrCreateOwnerByTelegram({
+        telegramUserId: input.telegramUserId
+      });
+      let draftId = latestTelegramDraftByUser.get(input.telegramUserId);
+      if (!draftId) {
+        const draft = await ownerRepository.createDraft({
+          ownerProfileId: owner.ownerProfile.id,
+          source: "telegram",
+          rawText: ""
+        });
+        draftId = draft.id;
+        latestTelegramDraftByUser.set(input.telegramUserId, draftId);
+      }
+      const fileName = `${input.fileId}.jpg`;
+      const uploaded = await storageService.uploadOwnerMedia({
+        ownerId: owner.ownerProfile.id,
+        fileName,
+        mimeType: input.mimeType,
+        bytes: input.bytes
+      });
+      const media = await ownerRepository.attachMedia({
+        ownerProfileId: owner.ownerProfile.id,
+        draftId,
+        kind: "interior",
+        fileName,
+        mimeType: input.mimeType,
+        storageKey: uploaded.storageKey,
+        publicUrl: uploaded.publicUrl
+      });
+
+      return {
+        id: media.id,
+        fileName: media.fileName
+      };
+    }
+  } satisfies TelegramOwnerServices;
+  const fetchTelegramFileBytes = async (fileId: string) => {
+    if (!config.telegramBotToken?.trim()) return Buffer.alloc(0);
+    const fileResponse = await fetchImpl(`https://api.telegram.org/bot${config.telegramBotToken}/getFile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: fileId })
+    });
+    const filePayload = await fileResponse.json() as { ok?: boolean; result?: { file_path?: string } };
+    const filePath = filePayload.result?.file_path;
+    if (!fileResponse.ok || !filePath) return Buffer.alloc(0);
+
+    const bytesResponse = await fetchImpl(`https://api.telegram.org/file/bot${config.telegramBotToken}/${filePath}`);
+    if (!bytesResponse.ok) return Buffer.alloc(0);
+    return Buffer.from(await bytesResponse.arrayBuffer());
+  };
+  const telegramBot = createTelegramBotHandler({
+    services: telegramOwnerServices,
+    fetchFileBytes: fetchTelegramFileBytes
+  });
+  const emailOtpChallenges: EmailOtpChallengeRecord[] = [];
+  let emailChallengeCount = 0;
   const app = Fastify({ logger: false });
   const studios = seedStudios.map((studio) => ({
     ...studio,
@@ -230,13 +497,296 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.register(cors, {
     origin: true
   });
+  app.register(multipart, {
+    limits: {
+      fileSize: maxOwnerMediaBytes
+    }
+  });
 
   app.get("/health", async () => ({
     ok: true,
     service: "studio-market-api"
   }));
 
+  app.get("/robots.txt", async (_request, reply) => {
+    reply.type("text/plain");
+    return "User-agent: *\nDisallow: /\n";
+  });
+
   app.get("/readiness", async () => getLaunchReadiness(config));
+  app.get("/api/readiness", async () => getProductionOnboardingReadiness(config));
+
+  app.post<{
+    Body: {
+      ownerDraftId?: string;
+      email?: string;
+    };
+  }>("/api/owner/email-codes", async (request, reply) => {
+    const email = request.body.email ? normalizeEmail(request.body.email) : "";
+    if (!email || !email.includes("@")) {
+      return reply.code(400).send({
+        error: "INVALID_OWNER_EMAIL",
+        message: "A valid email is required for backup access."
+      });
+    }
+
+    const session = await ownerRepository.findOrCreateOwnerByEmail(email);
+    const code = createOtpCode();
+    emailOtpChallenges.unshift({
+      id: `email_code_${++emailChallengeCount}`,
+      userId: session.user.id,
+      email,
+      codeHash: await hashOtpCode(code),
+      expiresAt: createOtpExpiry()
+    });
+    await emailService.sendOwnerOtp({ to: email, code });
+
+    return {
+      ok: true,
+      email
+    };
+  });
+
+  app.post<{
+    Body: {
+      email?: string;
+      code?: string;
+    };
+  }>("/api/owner/email-codes/verify", async (request, reply) => {
+    const email = request.body.email ? normalizeEmail(request.body.email) : "";
+    const code = request.body.code?.trim() ?? "";
+    if (!email || !/^\d{6}$/.test(code)) {
+      return reply.code(400).send({
+        error: "INVALID_OWNER_EMAIL_CODE",
+        message: "Enter the 6-digit email code."
+      });
+    }
+
+    const challenge = emailOtpChallenges.find(
+      (item) => item.email === email && !item.consumedAt && item.expiresAt > new Date()
+    );
+    if (!challenge || !(await verifyOtpCode(code, challenge.codeHash))) {
+      return reply.code(400).send({
+        error: "INVALID_OWNER_EMAIL_CODE",
+        message: "The email code is invalid or expired."
+      });
+    }
+
+    challenge.consumedAt = new Date();
+    const session = await ownerRepository.markEmailVerified({
+      userId: challenge.userId,
+      email,
+      verifiedAt: challenge.consumedAt
+    });
+    const ownerSessionToken = createOwnerSessionToken({ userId: session.user.id, email });
+
+    return {
+      session: toOwnerSessionResponse(session, ownerSessionToken)
+    };
+  });
+
+  app.get<{
+    Querystring: {
+      ownerSessionToken?: string;
+    };
+  }>("/api/owner/session", async (request, reply) => {
+    const token = request.query.ownerSessionToken;
+    const parsed = token ? parseOwnerSessionToken(token) : null;
+    if (!parsed) {
+      return reply.code(401).send({
+        error: "INVALID_OWNER_SESSION",
+        message: "Owner session token is required."
+      });
+    }
+    const session = await ownerRepository.getOwnerSession(parsed.userId);
+    if (!session) {
+      return reply.code(404).send({
+        error: "OWNER_SESSION_NOT_FOUND",
+        message: "Owner session was not found."
+      });
+    }
+
+    return {
+      session: toOwnerSessionResponse(session, token)
+    };
+  });
+
+  app.post("/api/owner/media", async (request, reply) => {
+    const fields: Record<string, string> = {};
+    let uploadedFile: { fileName: string; mimeType: string; bytes: Buffer } | undefined;
+
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === "file") {
+          const bytes = await part.toBuffer();
+          uploadedFile = {
+            fileName: part.filename,
+            mimeType: part.mimetype,
+            bytes
+          };
+        } else {
+          fields[part.fieldname] = String(part.value ?? "");
+        }
+      }
+    } catch (error) {
+      return reply.code(400).send({
+        error: "OWNER_MEDIA_TOO_LARGE",
+        message: error instanceof Error ? error.message : "Owner media upload failed."
+      });
+    }
+
+    const parsed = fields.ownerSessionToken ? parseOwnerSessionToken(fields.ownerSessionToken) : null;
+    if (!parsed) {
+      return reply.code(401).send({
+        error: "INVALID_OWNER_SESSION",
+        message: "Owner session token is required."
+      });
+    }
+    const session = await ownerRepository.getOwnerSession(parsed.userId);
+    if (!session) {
+      return reply.code(404).send({
+        error: "OWNER_SESSION_NOT_FOUND",
+        message: "Owner session was not found."
+      });
+    }
+    if (!uploadedFile || uploadedFile.bytes.length === 0) {
+      return reply.code(400).send({
+        error: "EMPTY_OWNER_MEDIA",
+        message: "Upload a non-empty image file."
+      });
+    }
+    if (!allowedOwnerImageTypes.has(uploadedFile.mimeType)) {
+      return reply.code(400).send({
+        error: "UNSUPPORTED_OWNER_MEDIA_TYPE",
+        message: "Owner media must be JPEG, PNG, WebP, or HEIC."
+      });
+    }
+
+    const uploaded = await storageService.uploadOwnerMedia({
+      ownerId: session.ownerProfile.id,
+      fileName: uploadedFile.fileName,
+      mimeType: uploadedFile.mimeType,
+      bytes: uploadedFile.bytes
+    });
+    const media = await ownerRepository.attachMedia({
+      ownerProfileId: session.ownerProfile.id,
+      draftId: fields.draftId || undefined,
+      kind: "interior",
+      fileName: uploadedFile.fileName,
+      mimeType: uploadedFile.mimeType,
+      storageKey: uploaded.storageKey,
+      publicUrl: uploaded.publicUrl
+    });
+
+    return {
+      media: {
+        id: media.id,
+        kind: media.kind,
+        fileName: media.fileName,
+        mimeType: media.mimeType,
+        publicUrl: media.publicUrl,
+        sortOrder: media.sortOrder
+      }
+    };
+  });
+
+  app.post<{
+    Body: {
+      source?: unknown;
+      text?: string;
+    };
+  }>("/api/owner/onboarding/start", async (request, reply) => {
+    if (!allowRequest("owner-onboarding", rateLimitKey(request), 30, 60_000)) {
+      return reply.code(429).send({
+        error: "RATE_LIMITED",
+        message: "Too many owner onboarding requests. Try again shortly."
+      });
+    }
+
+    const text = request.body.text?.trim();
+    const source = request.body.source === "telegram" ? "telegram" : request.body.source === "web" ? "web" : undefined;
+    if (!text || !source) {
+      return reply.code(400).send({
+        error: "INVALID_OWNER_ONBOARDING_START",
+        message: "Owner onboarding needs source and text."
+      });
+    }
+
+    return {
+      draft: await ownerOnboardingService.createDraftFromText({ source, text })
+    };
+  });
+
+  app.post<{
+    Params: { draftId: string };
+    Body: { text?: string };
+  }>("/api/owner/onboarding/:draftId/messages", async (request, reply) => {
+    const text = request.body.text?.trim();
+    if (!text) {
+      return reply.code(400).send({
+        error: "INVALID_OWNER_ONBOARDING_MESSAGE",
+        message: "Message text is required."
+      });
+    }
+    try {
+      return {
+        draft: await ownerOnboardingService.appendText({
+          draftId: request.params.draftId,
+          text
+        })
+      };
+    } catch (error) {
+      return reply.code(404).send({
+        error: "OWNER_DRAFT_NOT_FOUND",
+        message: error instanceof Error ? error.message : "Owner draft was not found."
+      });
+    }
+  });
+
+  app.get<{ Params: { draftId: string } }>("/api/owner/onboarding/:draftId", async (request, reply) => {
+    try {
+      return {
+        draft: await ownerOnboardingService.attachMedia({ draftId: request.params.draftId })
+      };
+    } catch (error) {
+      return reply.code(404).send({
+        error: "OWNER_DRAFT_NOT_FOUND",
+        message: error instanceof Error ? error.message : "Owner draft was not found."
+      });
+    }
+  });
+
+  app.post<{ Params: { draftId: string } }>("/api/owner/onboarding/:draftId/regenerate", async (request, reply) => {
+    try {
+      return {
+        draft: await ownerOnboardingService.regenerateDraft({ draftId: request.params.draftId })
+      };
+    } catch (error) {
+      return reply.code(404).send({
+        error: "OWNER_DRAFT_NOT_FOUND",
+        message: error instanceof Error ? error.message : "Owner draft was not found."
+      });
+    }
+  });
+
+  app.post<{
+    Params: { draftId: string };
+    Body: { ownerSessionToken?: string };
+  }>("/api/owner/onboarding/:draftId/publish", async (request, reply) => {
+    try {
+      return {
+        listing: await ownerOnboardingService.publishDraft({
+          draftId: request.params.draftId,
+          ownerSessionToken: request.body.ownerSessionToken ?? ""
+        })
+      };
+    } catch (error) {
+      return reply.code(403).send({
+        error: "OWNER_DRAFT_NOT_PUBLISHABLE",
+        message: error instanceof Error ? error.message : "Owner draft cannot be published."
+      });
+    }
+  });
 
   app.get("/session", async () => ({
     session: (await sessionStore.list())[0] ?? defaultSession
@@ -271,13 +821,19 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.post<{
     Body: {
       category?: unknown;
+      priority?: unknown;
       message?: string;
       includeActivity?: boolean;
       screen?: string;
+      userRole?: unknown;
+      currentView?: string;
+      currentStudioId?: string;
+      currentDraftId?: string;
       relatedStudioSlug?: string;
       relatedBookingId?: string;
       relatedShortlistId?: string;
       events?: SupportEvent[];
+      sessionEvents?: SupportEvent[];
       userAgent?: string;
     };
   }>("/support/tickets", async (request, reply) => {
@@ -285,6 +841,12 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       return reply.code(400).send({
         error: "INVALID_SUPPORT_CATEGORY",
         message: "Support category is required"
+      });
+    }
+    if (request.body.priority !== undefined && !isSupportPriority(request.body.priority)) {
+      return reply.code(400).send({
+        error: "INVALID_SUPPORT_PRIORITY",
+        message: "Support priority must be low, medium, or high"
       });
     }
 
@@ -295,23 +857,44 @@ export const buildServer = (options: BuildServerOptions = {}) => {
         message: "Support message is required"
       });
     }
+    if (!allowRequest("support", rateLimitKey(request), 20, 60_000)) {
+      return reply.code(429).send({
+        error: "RATE_LIMITED",
+        message: "Too many support requests. Try again shortly."
+      });
+    }
 
     const tickets = await supportTicketStore.list();
     const triage = request.body.category
-      ? { category: request.body.category, triageReason: "Submitted with an existing internal category." }
+      ? {
+          category: request.body.category,
+          priority: isSupportPriority(request.body.priority) ? request.body.priority : "medium",
+          triageReason: "Submitted with an existing internal category."
+        }
       : triageSupportTicket(message);
+    const session = (await sessionStore.list())[0] ?? defaultSession;
+    const currentView = request.body.currentView?.trim() || request.body.screen?.trim() || "unknown";
+    const sessionEvents = request.body.includeActivity === false
+      ? []
+      : request.body.sessionEvents ?? request.body.events ?? [];
     const ticket: SupportTicket = {
       id: `support-ticket-${tickets.length + 1}`,
       category: triage.category,
+      priority: isSupportPriority(request.body.priority) ? request.body.priority : triage.priority,
       triageReason: triage.triageReason,
       message,
       includeActivity: request.body.includeActivity ?? true,
-      session: (await sessionStore.list())[0] ?? defaultSession,
-      screen: request.body.screen?.trim() || "unknown",
+      session,
+      userRole: isSupportUserRole(request.body.userRole) ? request.body.userRole : session.role,
+      screen: request.body.screen?.trim() || currentView,
+      currentView,
+      currentStudioId: request.body.currentStudioId?.trim() || request.body.relatedStudioSlug,
+      currentDraftId: request.body.currentDraftId?.trim() || undefined,
       relatedStudioSlug: request.body.relatedStudioSlug,
       relatedBookingId: request.body.relatedBookingId,
       relatedShortlistId: request.body.relatedShortlistId,
-      events: request.body.includeActivity === false ? [] : request.body.events ?? [],
+      events: sessionEvents,
+      sessionEvents,
       userAgent: request.body.userAgent,
       createdAt: new Date().toISOString()
     };
@@ -455,6 +1038,28 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     };
   });
 
+  app.post<{
+    Headers: {
+      "x-telegram-bot-api-secret-token"?: string;
+    };
+    Body: unknown;
+  }>("/api/telegram/webhook", async (request, reply) => {
+    if (!allowRequest("telegram-webhook", rateLimitKey(request), 60, 60_000)) {
+      return reply.code(429).send({
+        error: "RATE_LIMITED",
+        message: "Too many Telegram updates. Try again shortly."
+      });
+    }
+    if (!isTelegramSecretValid(config.telegramWebhookSecret, request.headers["x-telegram-bot-api-secret-token"])) {
+      return reply.code(401).send({
+        error: "INVALID_TELEGRAM_SECRET",
+        message: "Telegram webhook secret token did not match"
+      });
+    }
+
+    return telegramBot.handleUpdate(request.body);
+  });
+
   app.get("/owner/listing-drafts", async () => ({
     drafts: await listingDraftStore.list()
   }));
@@ -547,8 +1152,8 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     return { studio };
   });
 
-  app.get<{ Params: { slug: string } }>("/public/studios/:slug", async (request, reply) => {
-    const studio = findStudioBySlug(studios, request.params.slug);
+  const sendPublicStudio = async (slug: string, metricPath: string, reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }) => {
+    const studio = findStudioBySlug(studios, slug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -557,9 +1162,54 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       });
     }
 
-    await recordPublicMetric(`/public/studios/${request.params.slug}`);
+    await recordPublicMetric(metricPath);
 
     return { studio: toPublicStudio(studio) };
+  };
+
+  app.get<{ Params: { slug: string } }>("/public/studios/:slug", async (request, reply) => (
+    sendPublicStudio(request.params.slug, `/public/studios/${request.params.slug}`, reply)
+  ));
+
+  app.get<{ Params: { slug: string } }>("/api/studios/:slug", async (request, reply) => (
+    sendPublicStudio(request.params.slug, `/api/studios/${request.params.slug}`, reply)
+  ));
+
+  app.get<{
+    Querystring: {
+      limit?: string;
+      cursor?: string;
+      cityId?: string;
+      query?: string;
+      maxPrice?: string;
+      shootType?: ShootType;
+      featureIds?: string;
+      equipmentIds?: string;
+      amenityIds?: string;
+      bookingMode?: BookingMode;
+    };
+  }>("/api/studios", async (request) => {
+    const filters: StudioSearchFilters = {
+      cityId: request.query.cityId,
+      query: request.query.query,
+      maxPrice: request.query.maxPrice ? Number(request.query.maxPrice) : undefined,
+      shootType: request.query.shootType,
+      featureIds: toArray<FeatureId>(request.query.featureIds),
+      equipmentIds: toArray<EquipmentId>(request.query.equipmentIds),
+      amenityIds: toArray<AmenityId>(request.query.amenityIds),
+      bookingMode: request.query.bookingMode
+    };
+    const allResults = searchStudios(studios, filters);
+    const start = Math.max(0, Number(request.query.cursor ?? 0) || 0);
+    const limit = Math.min(24, Math.max(1, Number(request.query.limit ?? 12) || 12));
+    const page = allResults.slice(start, start + limit);
+    const nextCursor = start + limit < allResults.length ? String(start + limit) : undefined;
+
+    return {
+      studios: page.map(toPublicStudio),
+      total: allResults.length,
+      nextCursor
+    };
   });
 
   app.get("/internal/public-metrics", async () => ({
@@ -679,11 +1329,12 @@ export const buildServer = (options: BuildServerOptions = {}) => {
 
     try {
       const booking = createBookingIntent(studio, request.body);
+      const pricedBooking = withPaymentDetails(booking, paymentMode);
       const bookingIntents = await bookingIntentStore.list();
-      await bookingIntentStore.setAll([...bookingIntents, booking]);
+      await bookingIntentStore.setAll([...bookingIntents, pricedBooking]);
 
       return reply.code(201).send({
-        booking
+        booking: pricedBooking
       });
     } catch (error) {
       return reply.code(400).send({
@@ -830,11 +1481,11 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     }
 
     try {
-      const booking = decideBookingIntent(
+      const booking = withPaymentDetails(decideBookingIntent(
         bookingIntents[bookingIndex],
         request.body.decision,
         request.body.ownerNote
-      );
+      ), paymentMode);
       bookingIntents[bookingIndex] = booking;
       await bookingIntentStore.setAll(bookingIntents);
 

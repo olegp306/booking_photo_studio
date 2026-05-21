@@ -16,7 +16,10 @@ import {
   type ListingReviewDecision,
   type ListingReviewItem,
   type OwnerAvailabilityBlock,
+  type OwnerMedia,
+  type OwnerOnboardingDraft,
   type OwnerListingUpdate,
+  type PublishedStudioListing,
   type OwnerBookingDecision,
   type ReferralSummary,
   type ReferralSource,
@@ -98,19 +101,26 @@ export interface MediaSuggestionResult {
 
 export interface SupportTicketRequest {
   category?: SupportCategory;
+  priority?: SupportTicket["priority"];
   message: string;
   includeActivity: boolean;
   screen: string;
+  userRole?: SupportTicket["userRole"];
+  currentView?: string;
+  currentStudioId?: string;
+  currentDraftId?: string;
   relatedStudioSlug?: string;
   relatedBookingId?: string;
   relatedShortlistId?: string;
   events: SupportEvent[];
+  sessionEvents?: SupportEvent[];
   userAgent?: string;
 }
 
 const localShortlists = new Map<string, SharedShortlist>();
 const localAvailabilityBlocks: OwnerAvailabilityBlock[] = [];
 const localSupportTickets: SupportTicket[] = [];
+const localOwnerDrafts = new Map<string, OwnerOnboardingDraft>();
 let localSession: UserSession = {
   id: "demo-session",
   role: "photographer",
@@ -118,6 +128,7 @@ let localSession: UserSession = {
 };
 let localShortlistCount = 0;
 let localAvailabilityBlockCount = 0;
+let localOwnerDraftCount = 0;
 
 const isBlockedSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlot) =>
   (block.kind ?? "hold") === "hold" &&
@@ -134,18 +145,25 @@ const isOpenOverrideSlot = (block: OwnerAvailabilityBlock, slot: AvailabilitySlo
 
 const triageLocalSupportCategory = (message: string): SupportCategory => {
   const normalized = message.toLowerCase();
-  if (normalized.includes("payment") || normalized.includes("paid") || normalized.includes("stripe")) return "payment";
-  if (normalized.includes("bug") || normalized.includes("broken") || normalized.includes("error")) return "bug";
-  if (normalized.includes("listing") || normalized.includes("owner") || normalized.includes("studio profile")) {
-    return "owner_listing";
+  if (
+    normalized.includes("owner") ||
+    normalized.includes("studio profile") ||
+    normalized.includes("draft") ||
+    normalized.includes("email code") ||
+    normalized.includes("photo upload")
+  ) {
+    return "owner_onboarding";
   }
+  if (normalized.includes("payment") || normalized.includes("paid") || normalized.includes("stripe")) return "payment";
+  if (normalized.includes("bug") || normalized.includes("broken") || normalized.includes("error")) return "bug_report";
   if (normalized.includes("wrong") || normalized.includes("address") || normalized.includes("photo")) {
-    return "studio_info_wrong";
+    return "listing_quality";
   }
   if (normalized.includes("booking") || normalized.includes("slot") || normalized.includes("confirmed")) {
     return "booking_issue";
   }
-  return "idea";
+  if (normalized.includes("feature") || normalized.includes("add") || normalized.includes("idea")) return "feature_request";
+  return "other";
 };
 
 export const fallbackLaunchReadiness: LaunchReadiness = {
@@ -260,10 +278,16 @@ export const createSupportTicket = async (request: SupportTicketRequest): Promis
       id: `local-support-ticket-${localSupportTickets.length + 1}`,
       ...request,
       category: request.category ?? triageLocalSupportCategory(request.message),
+      priority: request.priority ?? "medium",
       triageReason: request.category
         ? "Submitted with an existing internal category."
         : "Local fallback classified the free-text support message.",
       session: localSession,
+      userRole: request.userRole ?? localSession.role,
+      currentView: request.currentView ?? request.screen,
+      currentStudioId: request.currentStudioId ?? request.relatedStudioSlug,
+      currentDraftId: request.currentDraftId,
+      sessionEvents: request.sessionEvents ?? request.events,
       createdAt: new Date().toISOString()
     };
     localSupportTickets.unshift(ticket);
@@ -401,6 +425,140 @@ export const setupTelegramWebhook = async (): Promise<TelegramWebhookSetupResult
 
   return payload as TelegramWebhookSetupResult;
 };
+
+export async function startOwnerOnboarding(input: { text: string; source: "web" }): Promise<OwnerOnboardingDraft> {
+  try {
+    const response = await fetch(`${API_BASE}/owner/onboarding/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+    if (!response.ok) throw new Error("Failed to start owner onboarding");
+    const payload = (await response.json()) as { draft: OwnerOnboardingDraft };
+    localOwnerDrafts.set(payload.draft.id, payload.draft);
+    return payload.draft;
+  } catch {
+    localOwnerDraftCount += 1;
+    const draft: OwnerOnboardingDraft = {
+      id: `local-owner-draft-${localOwnerDraftCount}`,
+      source: input.source,
+      status: "draft_ready",
+      ownerSessionToken: `local-owner-token-${localOwnerDraftCount}`,
+      rawText: input.text,
+      studioName: input.text.toLowerCase().includes("karlin") ? "Loft Karlin" : "New studio draft",
+      city: input.text.toLowerCase().includes("prague") || input.text.toLowerCase().includes("karlin") ? "Prague" : undefined,
+      description: input.text,
+      suggestedAmenities: input.text.toLowerCase().includes("cyclorama") ? ["cyclorama"] : [],
+      suggestedRules: [],
+      suggestedRooms: [],
+      media: [],
+      missingFields: ["price"]
+    };
+    localOwnerDrafts.set(draft.id, draft);
+    return draft;
+  }
+}
+
+export async function sendOwnerOnboardingMessage(
+  draftId: string,
+  input: { text: string }
+): Promise<OwnerOnboardingDraft> {
+  try {
+    const response = await fetch(`${API_BASE}/owner/onboarding/${draftId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+    if (!response.ok) throw new Error("Failed to send owner onboarding message");
+    const payload = (await response.json()) as { draft: OwnerOnboardingDraft };
+    localOwnerDrafts.set(payload.draft.id, payload.draft);
+    return payload.draft;
+  } catch {
+    const current = localOwnerDrafts.get(draftId);
+    if (!current) throw new Error("Owner draft was not found");
+    const draft = {
+      ...current,
+      rawText: `${current.rawText}\n${input.text}`
+    };
+    localOwnerDrafts.set(draft.id, draft);
+    return draft;
+  }
+}
+
+export async function uploadOwnerMedia(input: {
+  draftId: string;
+  file: File;
+  ownerSessionToken?: string;
+}): Promise<OwnerMedia> {
+  const form = new FormData();
+  form.set("draftId", input.draftId);
+  if (input.ownerSessionToken) form.set("ownerSessionToken", input.ownerSessionToken);
+  form.set("file", input.file);
+
+  try {
+    const response = await fetch(`${API_BASE}/owner/media`, {
+      method: "POST",
+      body: form
+    });
+    if (!response.ok) throw new Error("Failed to upload owner media");
+    const payload = (await response.json()) as { media: OwnerMedia };
+    return payload.media;
+  } catch {
+    return {
+      id: `local-owner-media-${Date.now()}`,
+      fileName: input.file.name,
+      mimeType: input.file.type,
+      publicUrl: URL.createObjectURL(input.file),
+      kind: "interior",
+      sortOrder: 0
+    };
+  }
+}
+
+export async function requestOwnerEmailCode(input: { draftId: string; email: string }): Promise<{ ok: true; email: string }> {
+  const response = await fetch(`${API_BASE}/owner/email-codes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ ownerDraftId: input.draftId, email: input.email })
+  });
+  if (!response.ok) throw new Error("Failed to request owner email code");
+  return (await response.json()) as { ok: true; email: string };
+}
+
+export async function verifyOwnerEmailCode(input: { email: string; code: string }): Promise<{ emailVerified: boolean; ownerSessionToken: string }> {
+  const response = await fetch(`${API_BASE}/owner/email-codes/verify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) throw new Error("Failed to verify owner email code");
+  const payload = (await response.json()) as { session: { emailVerified: boolean; ownerSessionToken: string } };
+  return payload.session;
+}
+
+export async function publishOwnerDraft(input: {
+  draftId: string;
+  ownerSessionToken: string;
+}): Promise<PublishedStudioListing> {
+  const response = await fetch(`${API_BASE}/owner/onboarding/${input.draftId}/publish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ ownerSessionToken: input.ownerSessionToken })
+  });
+  if (!response.ok) throw new Error("Failed to publish owner draft");
+  const payload = (await response.json()) as { listing: PublishedStudioListing };
+  return payload.listing;
+}
 
 export const loadListingReviews = async (): Promise<ListingReviewItem[]> => {
   try {
@@ -701,6 +859,7 @@ export const resetLocalApiStateForTests = () => {
   localShortlists.clear();
   localAvailabilityBlocks.splice(0, localAvailabilityBlocks.length);
   localSupportTickets.splice(0, localSupportTickets.length);
+  localOwnerDrafts.clear();
   localSession = {
     id: "demo-session",
     role: "photographer",
@@ -708,6 +867,7 @@ export const resetLocalApiStateForTests = () => {
   };
   localShortlistCount = 0;
   localAvailabilityBlockCount = 0;
+  localOwnerDraftCount = 0;
 };
 
 export const createSharedShortlist = async (

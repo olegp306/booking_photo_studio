@@ -210,6 +210,69 @@ describe("App", () => {
     expect(screen.getByText("Opened Studio Lumen Karlin")).toBeInTheDocument();
   });
 
+  it("opens owner onboarding from the floating studio CTA", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /list your studio/i }));
+
+    expect(screen.getByRole("dialog", { name: /create your studio profile/i })).toBeInTheDocument();
+  });
+
+  it("lets an owner send text, attach photos, then asks for email after draft generation", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/owner/onboarding/start")) {
+        return new Response(
+          JSON.stringify({
+            draft: {
+              id: "draft_1",
+              source: "web",
+              status: "draft_ready",
+              ownerSessionToken: "owner-token",
+              rawText: "Karlin daylight loft with cyclorama",
+              studioName: "Loft Karlin",
+              city: "Prague",
+              description: "Bright daylight loft with cyclorama.",
+              suggestedAmenities: ["cyclorama", "makeup table"],
+              suggestedRules: [],
+              suggestedRooms: [],
+              media: [],
+              missingFields: ["price"]
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/owner/media")) {
+        return new Response(
+          JSON.stringify({
+            media: {
+              id: "media_1",
+              fileName: "room.jpg",
+              mimeType: "image/jpeg",
+              publicUrl: "https://media.example.com/room.jpg",
+              kind: "interior",
+              sortOrder: 1
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      throw new Error("Use local fallback");
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /list your studio/i }));
+    await user.type(screen.getByLabelText(/studio description/i), "Karlin daylight loft with cyclorama");
+    await user.upload(screen.getByLabelText(/add photos/i), new File(["x"], "room.jpg", { type: "image/jpeg" }));
+    await user.click(screen.getByRole("button", { name: /create draft/i }));
+
+    expect(await screen.findByText(/Loft Karlin/i)).toBeInTheDocument();
+    expect(screen.getByText(/email helps you keep access/i)).toBeInTheDocument();
+  });
+
   it("shows referral source totals in the host growth view", async () => {
     const user = userEvent.setup();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -414,10 +477,10 @@ describe("App", () => {
     expect(screen.getByText("Marta Client")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Approve Marta Client booking" }));
 
-    expect(await screen.findByText("Awaiting payment")).toBeInTheDocument();
+    expect(await screen.findByText("Confirmed")).toBeInTheDocument();
   });
 
-  it("shows customer bookings and payment call to action after owner approval", async () => {
+  it("shows customer bookings with direct studio payment copy after owner approval", async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -439,16 +502,11 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "Approve Marta Client booking" }));
     await user.click(screen.getByRole("link", { name: "Bookings" }));
 
-    expect(await screen.findByText("Awaiting payment")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
-
     expect(await screen.findByText("Confirmed")).toBeInTheDocument();
-    expect(await screen.findByText("Payment captured: booking confirmed.")).toBeInTheDocument();
-    expect(screen.getByText("Receipt #studio-lumen-karlin-lumen-product-2026-06-12-11-00-marta-example-com")).toBeInTheDocument();
-    expect(screen.getByText("Paid CZK 1,400")).toBeInTheDocument();
-    expect(screen.getByText("Payment status: Confirmed")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Download receipt for Studio Lumen Karlin" }));
-    expect(await screen.findByText("Receipt download prepared.")).toBeInTheDocument();
+    expect(screen.getByText("Booking #studio-lumen-karlin-lumen-product-2026-06-12-11-00-marta-example-com")).toBeInTheDocument();
+    expect(screen.getByText("Price CZK 1,400")).toBeInTheDocument();
+    expect(screen.getByText("Payment: direct with the studio")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue to payment for Studio Lumen Karlin" })).not.toBeInTheDocument();
   });
 
   it("lets customers and studio owners exchange booking messages", async () => {
@@ -497,9 +555,6 @@ describe("App", () => {
 
     await user.click(screen.getByRole("link", { name: "Host" }));
     await user.click(await screen.findByRole("button", { name: "Approve Marta Client booking" }));
-    await user.click(screen.getByRole("link", { name: "Bookings" }));
-    await user.click(await screen.findByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
-    await screen.findByText("Confirmed");
 
     await user.click(screen.getByRole("link", { name: "Host" }));
     await user.click(await screen.findByRole("button", { name: "Complete Marta Client booking" }));
@@ -521,8 +576,6 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Back to results" }));
     await user.click(screen.getByRole("link", { name: "Host" }));
     await user.click(await screen.findByRole("button", { name: "Approve Marta Client booking" }));
-    await user.click(screen.getByRole("link", { name: "Bookings" }));
-    await user.click(await screen.findByRole("button", { name: "Continue to payment for Studio Lumen Karlin" }));
     await user.click(screen.getByRole("link", { name: "Host" }));
     await user.click(await screen.findByRole("button", { name: "Complete Marta Client booking" }));
     await user.click(screen.getByRole("link", { name: "Bookings" }));

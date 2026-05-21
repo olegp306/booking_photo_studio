@@ -18,6 +18,50 @@ export interface TelegramWebhookSetupResult {
   telegram: unknown;
 }
 
+export interface TelegramOwnerDraftSummary {
+  id: string;
+  studioName?: string;
+  city?: string;
+  missingFields: string[];
+}
+
+export interface TelegramOwnerMediaSummary {
+  id: string;
+  fileName: string;
+}
+
+export interface TelegramOwnerServices {
+  createDraftFromTelegram(input: {
+    telegramUserId: string;
+    username?: string;
+    firstName?: string;
+    text: string;
+  }): Promise<TelegramOwnerDraftSummary>;
+  attachTelegramPhoto(input: {
+    telegramUserId: string;
+    fileId: string;
+    bytes: Buffer;
+    mimeType: string;
+  }): Promise<TelegramOwnerMediaSummary>;
+}
+
+export interface TelegramBotHandlerResult {
+  ok: true;
+  messages: Array<{
+    chatId?: number | string;
+    text: string;
+  }>;
+}
+
+export interface TelegramBotHandler {
+  handleUpdate(update: unknown): Promise<TelegramBotHandlerResult>;
+}
+
+export interface TelegramBotDeps {
+  services: TelegramOwnerServices;
+  fetchFileBytes?: (fileId: string) => Promise<Buffer>;
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -46,8 +90,126 @@ export const extractTelegramChatId = (body: unknown) => {
   return payload.message?.chat?.id;
 };
 
+const extractTelegramFrom = (body: unknown) => {
+  if (!body || typeof body !== "object") return undefined;
+  const payload = body as {
+    message?: {
+      from?: {
+        id?: number | string;
+        username?: string;
+        first_name?: string;
+      };
+    };
+  };
+
+  return payload.message?.from;
+};
+
+const extractLargestTelegramPhoto = (body: unknown) => {
+  if (!body || typeof body !== "object") return undefined;
+  const payload = body as {
+    message?: {
+      photo?: Array<{
+        file_id: string;
+        file_unique_id?: string;
+        width?: number;
+        height?: number;
+        file_size?: number;
+      }>;
+    };
+  };
+  const photos = payload.message?.photo ?? [];
+
+  return [...photos].sort((left, right) => (right.file_size ?? 0) - (left.file_size ?? 0))[0];
+};
+
 export const isTelegramSecretValid = (configuredSecret: string | undefined, incomingSecret: string | undefined) =>
   !configuredSecret?.trim() || configuredSecret === incomingSecret;
+
+export const createTelegramBotHandler = (deps: TelegramBotDeps): TelegramBotHandler => ({
+  async handleUpdate(update) {
+    const chatId = extractTelegramChatId(update);
+    const from = extractTelegramFrom(update);
+    const telegramUserId = String(from?.id ?? chatId ?? "unknown");
+    const text = extractTelegramText(update).trim();
+    const photo = extractLargestTelegramPhoto(update);
+
+    if (text === "/start") {
+      return {
+        ok: true,
+        messages: [{
+          chatId,
+          text: "Send studio notes or photos, and I will help create your studio draft."
+        }]
+      };
+    }
+
+    if (text === "/draft") {
+      return {
+        ok: true,
+        messages: [{ chatId, text: "Send a studio description and I will turn it into a draft." }]
+      };
+    }
+
+    if (text === "/email") {
+      return {
+        ok: true,
+        messages: [{ chatId, text: "Open the web draft and add email backup access with a 6-digit code." }]
+      };
+    }
+
+    if (text === "/publish") {
+      return {
+        ok: true,
+        messages: [{ chatId, text: "Publishing requires a verified email from the web draft." }]
+      };
+    }
+
+    if (photo) {
+      const bytes = deps.fetchFileBytes
+        ? await deps.fetchFileBytes(photo.file_id)
+        : Buffer.alloc(0);
+      await deps.services.attachTelegramPhoto({
+        telegramUserId,
+        fileId: photo.file_id,
+        bytes,
+        mimeType: "image/jpeg"
+      });
+
+      return {
+        ok: true,
+        messages: [{ chatId, text: "Studio photo added to your draft. Send more photos or describe the space." }]
+      };
+    }
+
+    if (text) {
+      const draft = await deps.services.createDraftFromTelegram({
+        telegramUserId,
+        username: from?.username,
+        firstName: from?.first_name,
+        text
+      });
+
+      return {
+        ok: true,
+        messages: [{
+          chatId,
+          text: [
+            `I started your studio draft${draft.studioName ? ` for ${draft.studioName}` : ""}.`,
+            draft.city ? `City: ${draft.city}.` : undefined,
+            draft.missingFields.length ? `Still needed: ${draft.missingFields.join(", ")}.` : undefined,
+            "Add email backup access from the web draft so you do not lose it."
+          ].filter(Boolean).join(" ")
+        }]
+      };
+    }
+
+    return {
+      ok: true,
+      messages: [{ chatId, text: "Send studio notes or a studio photo to start." }]
+    };
+  }
+});
 
 export const sendTelegramListingDraftReply = async (
   chatId: number | string | undefined,

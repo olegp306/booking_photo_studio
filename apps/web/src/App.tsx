@@ -2,7 +2,6 @@ import {
   CalendarDays,
   Check,
   ChevronLeft,
-  CreditCard,
   Heart,
   Home,
   Inbox,
@@ -30,6 +29,8 @@ import {
   type ListingDraft,
   type ListingStatus,
   type OwnerAvailabilityBlock,
+  type OwnerMedia,
+  type OwnerOnboardingDraft,
   type OwnerListingUpdate,
   type SharedShortlistItem,
   type ShortlistDecision,
@@ -41,7 +42,6 @@ import {
 } from "@studio-market/shared";
 import {
   completeOwnerBooking,
-  confirmBookingPayment,
   createOwnerAvailabilityBlock,
   createSharedShortlist,
   createSupportTicket,
@@ -63,6 +63,7 @@ import {
   loadTelegramMiniAppDrafts,
   releaseOwnerAvailabilityBlock,
   setupTelegramWebhook,
+  startOwnerOnboarding,
   submitBookingReview,
   submitBookingRequest,
   suggestMediaDetails as suggestMediaDetailsFromApi,
@@ -70,6 +71,9 @@ import {
   updateOwnerListing,
   updateSessionRole,
   updateSharedShortlist,
+  uploadOwnerMedia,
+  requestOwnerEmailCode,
+  verifyOwnerEmailCode,
   type ImportedListingDraft,
   type ListingReviewDecision,
   type ListingReviewItem,
@@ -206,6 +210,7 @@ export const App = () => {
   const [activeShortlistId, setActiveShortlistId] = useState<string | undefined>();
   const [ownerInitialTab, setOwnerInitialTab] = useState<OwnerDashboardTab>("requests");
   const [supportOpen, setSupportOpen] = useState(false);
+  const [ownerOnboardingOpen, setOwnerOnboardingOpen] = useState(false);
   const [supportEvents, setSupportEvents] = useState<SupportEvent[]>([]);
   const [session, setSession] = useState<UserSession>({
     id: "demo-session",
@@ -387,14 +392,21 @@ export const App = () => {
   };
 
   const supportLayer = (
-    <SupportLayer
-      events={supportEvents}
-      isOpen={supportOpen}
-      onClose={() => setSupportOpen(false)}
-      onOpen={() => setSupportOpen(true)}
-      relatedStudioSlug={selectedStudio?.slug}
-      screen={window.location.hash || "#explore"}
-    />
+    <>
+      <OwnerOnboardingLayer
+        isOpen={ownerOnboardingOpen}
+        onClose={() => setOwnerOnboardingOpen(false)}
+        onOpen={() => setOwnerOnboardingOpen(true)}
+      />
+      <SupportLayer
+        events={supportEvents}
+        isOpen={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        onOpen={() => setSupportOpen(true)}
+        relatedStudioSlug={selectedStudio?.slug}
+        screen={window.location.hash || "#explore"}
+      />
+    </>
   );
 
   if (selectedStudio) {
@@ -423,12 +435,6 @@ export const App = () => {
           bookings={customerBookings}
           messages={bookingMessages}
           onBackToExplore={() => setView("explore")}
-          onConfirmPayment={async (booking) => {
-            const updated = await confirmBookingPayment(booking);
-            setCustomerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-            setOwnerBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-            return updated;
-          }}
           onSubmitReview={async (booking, rating, comment) => {
             const studio = studios.find((candidate) => candidate.slug === booking.studioSlug);
             if (!studio) throw new Error("Studio was not found");
@@ -656,6 +662,170 @@ const AccountSwitcher = ({ session, onChangeRole }: AccountSwitcherProps) => (
   </section>
 );
 
+interface OwnerOnboardingLayerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onOpen: () => void;
+}
+
+const OwnerOnboardingLayer = ({ isOpen, onClose, onOpen }: OwnerOnboardingLayerProps) => (
+  <>
+    <button className="owner-fab" onClick={onOpen} type="button">
+      <Sparkles size={16} />
+      List your studio
+    </button>
+    {isOpen && <OwnerOnboardingDrawer onClose={onClose} />}
+  </>
+);
+
+const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [draft, setDraft] = useState<OwnerOnboardingDraft | undefined>();
+  const [uploadedMedia, setUploadedMedia] = useState<OwnerMedia[]>([]);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [emailRequested, setEmailRequested] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const createDraft = async (event: FormEvent) => {
+    event.preventDefault();
+    const text = description.trim();
+    if (!text) return;
+    setStatus("Creating draft...");
+    const nextDraft = await startOwnerOnboarding({ source: "web", text });
+    const media = await Promise.all(
+      files.map((file) =>
+        uploadOwnerMedia({
+          draftId: nextDraft.id,
+          file,
+          ownerSessionToken: nextDraft.ownerSessionToken
+        })
+      )
+    );
+    setDraft({ ...nextDraft, media: [...nextDraft.media, ...media] });
+    setUploadedMedia(media);
+    setStatus("");
+  };
+
+  const requestCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!draft || !email.trim()) return;
+    await requestOwnerEmailCode({ draftId: draft.id, email: email.trim() });
+    setEmailRequested(true);
+  };
+
+  const verifyCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(code) || !email.trim()) return;
+    const session = await verifyOwnerEmailCode({ email: email.trim(), code });
+    setEmailVerified(session.emailVerified);
+    if (draft) setDraft({ ...draft, ownerSessionToken: session.ownerSessionToken });
+  };
+
+  return (
+    <aside className="owner-drawer" role="dialog" aria-label="Create your studio profile">
+      <div className="support-drawer-head">
+        <div>
+          <p className="eyebrow">Studio owners</p>
+          <h2>Create your studio profile</h2>
+        </div>
+        <button className="icon-button" onClick={onClose} type="button" aria-label="Close owner onboarding">
+          <X size={18} />
+        </button>
+      </div>
+
+      <form className="owner-chat-form" onSubmit={createDraft}>
+        <label>
+          Studio description
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Tell us the city, rooms, light, equipment, price, and house rules."
+            required
+          />
+        </label>
+        <label>
+          Add photos
+          <input
+            accept="image/jpeg,image/png,image/webp,image/heic"
+            multiple
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(event.target.files ?? []))}
+            type="file"
+          />
+        </label>
+        {files.length > 0 && (
+          <div className="owner-photo-list">
+            {files.map((file) => (
+              <span key={`${file.name}-${file.size}`}>{file.name}</span>
+            ))}
+          </div>
+        )}
+        <button className="request-button" type="submit">
+          Create draft
+        </button>
+      </form>
+
+      {status && <p className="booking-status">{status}</p>}
+
+      {draft && (
+        <section className="owner-draft-preview" aria-label="Studio draft preview">
+          <p className="eyebrow">Draft ready</p>
+          <h3>{draft.studioName ?? "New studio draft"}</h3>
+          {draft.city && <p>{draft.city}</p>}
+          {draft.description && <p>{draft.description}</p>}
+          <div className="owner-draft-tags">
+            {draft.suggestedAmenities.map((amenity) => <span key={amenity}>{amenity}</span>)}
+            {draft.missingFields.map((field) => <span key={field}>Missing {field}</span>)}
+          </div>
+          {uploadedMedia.length > 0 && (
+            <div className="owner-photo-list">
+              {uploadedMedia.map((media) => <span key={media.id}>{media.fileName}</span>)}
+            </div>
+          )}
+        </section>
+      )}
+
+      {draft && (
+        <section className="owner-email-step">
+          <p>Email helps you keep access to this draft from the web, even if you started in Telegram. No password.</p>
+          <form className="owner-email-form" onSubmit={requestCode}>
+            <label>
+              Email
+              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+            </label>
+            <button className="request-button secondary" type="submit">
+              Send code
+            </button>
+          </form>
+          {emailRequested && (
+            <form className="owner-email-form" onSubmit={verifyCode}>
+              <label>
+                6-digit code
+                <input
+                  inputMode="numeric"
+                  maxLength={6}
+                  pattern="\d{6}"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  required
+                />
+              </label>
+              <button className="request-button" disabled={code.length !== 6} type="submit">
+                Verify email
+              </button>
+            </form>
+          )}
+          <button className="request-button" disabled={!emailVerified} type="button">
+            Publish draft
+          </button>
+        </section>
+      )}
+    </aside>
+  );
+};
+
 interface SupportLayerProps {
   events: SupportEvent[];
   isOpen: boolean;
@@ -702,8 +872,11 @@ const SupportDrawer = ({ events, onClose, relatedStudioSlug, screen }: SupportDr
       message: trimmedMessage,
       includeActivity,
       screen,
+      currentView: screen,
+      currentStudioId: relatedStudioSlug,
       relatedStudioSlug,
       events: includeActivity ? events : [],
+      sessionEvents: includeActivity ? events : [],
       userAgent: navigator.userAgent
     });
     setMessage("");
@@ -1019,7 +1192,7 @@ const StudioDetail = ({ studio, isSaved, onBack, onBookingCreated, onSave }: Stu
           {booking && (
             <p className="booking-status">
               {booking.status === "awaiting_payment"
-                ? "Slot ready: continue to payment."
+                ? "Booking confirmed. No online payment is taken; pay the studio directly."
                 : "Request sent: waiting for owner approval."}
             </p>
           )}
@@ -1058,7 +1231,7 @@ interface OwnerDashboardProps {
 const statusLabel = (status: BookingIntent["status"]) => {
   const labels: Record<BookingIntent["status"], string> = {
     pending_owner_approval: "Needs review",
-    awaiting_payment: "Awaiting payment",
+    awaiting_payment: "Confirmed - pay at studio",
     confirmed: "Confirmed",
     declined: "Declined",
     cancelled: "Cancelled",
@@ -1153,7 +1326,6 @@ interface CustomerBookingsProps {
   bookings: BookingIntent[];
   messages: Record<string, BookingMessage[]>;
   onBackToExplore: () => void;
-  onConfirmPayment: (booking: BookingIntent) => Promise<BookingIntent>;
   onSubmitReview: (booking: BookingIntent, rating: number, comment: string) => Promise<Studio>;
   onOpenSaved: () => void;
   onOpenHost: () => void;
@@ -1164,14 +1336,11 @@ const CustomerBookings = ({
   bookings,
   messages,
   onBackToExplore,
-  onConfirmPayment,
   onSubmitReview,
   onOpenSaved,
   onOpenHost,
   onSendMessage
 }: CustomerBookingsProps) => {
-  const [confirmedPaymentFor, setConfirmedPaymentFor] = useState<string | undefined>();
-  const [receiptReadyFor, setReceiptReadyFor] = useState<string | undefined>();
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
   const [reviewRatings, setReviewRatings] = useState<Record<string, number>>({});
@@ -1193,7 +1362,7 @@ const CustomerBookings = ({
           <CalendarDays size={20} />
           <div>
             <strong>{bookings.length} bookings</strong>
-            <span>Track requests, approvals, and payment steps.</span>
+            <span>Track requests, approvals, and direct-at-studio payment notes.</span>
           </div>
         </div>
       </section>
@@ -1220,47 +1389,24 @@ const CustomerBookings = ({
               <p className="owner-message">{booking.message}</p>
 
               {booking.status === "awaiting_payment" && (
-                <button
-                  className="payment-button"
-                  aria-label={`Continue to payment for ${booking.studioName}`}
-                  onClick={async () => {
-                    const updated = await onConfirmPayment(booking);
-                    setConfirmedPaymentFor(updated.id);
-                  }}
-                >
-                  <CreditCard size={17} />
-                  Continue to payment
-                </button>
-              )}
-
-              {confirmedPaymentFor === booking.id && (
-                <p className="booking-status">Payment captured: booking confirmed.</p>
+                <p className="booking-status">
+                  No online payment is taken yet. Your request is approved; pay the studio directly according to the booking terms.
+                </p>
               )}
 
               {(booking.status === "confirmed" || booking.status === "completed") && (
-                <section className="booking-receipt" aria-label={`Receipt for ${booking.studioName}`}>
+                <section className="booking-receipt" aria-label={`Booking summary for ${booking.studioName}`}>
                   <div>
-                    <p className="eyebrow">Receipt</p>
-                    <h3>Receipt #{booking.id}</h3>
+                    <p className="eyebrow">Booking summary</p>
+                    <h3>Booking #{booking.id}</h3>
                   </div>
                   <div className="receipt-lines">
-                    <p>Paid {accessibleMoney(booking.totalPrice, booking.currency)}</p>
-                    <p>Payment status: {booking.status === "completed" ? "Completed" : "Confirmed"}</p>
+                    <p>Price {accessibleMoney(booking.totalPrice, booking.currency)}</p>
+                    <p>Payment: direct with the studio</p>
                     <p>
                       Shoot time: {booking.date} at {booking.startTime}
                     </p>
                   </div>
-                  <button
-                    className="secondary-button"
-                    aria-label={`Download receipt for ${booking.studioName}`}
-                    onClick={() => setReceiptReadyFor(booking.id)}
-                    type="button"
-                  >
-                    Download receipt
-                  </button>
-                  {receiptReadyFor === booking.id && (
-                    <p className="booking-status">Receipt download prepared.</p>
-                  )}
                 </section>
               )}
 
