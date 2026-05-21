@@ -83,10 +83,24 @@ When a Telegram-created draft is later verified by email in the web app, the sam
 ## Booking Test
 
 1. Open a studio.
-2. Request or confirm a slot.
-3. Verify price is visible.
-4. Confirm there is no card entry, checkout, payment capture, or receipt UI.
-5. Booking copy should say payment is direct with the studio.
+2. Enter guest email and send the 6-digit booking code.
+3. Verify guest email, then send `Request booking`.
+4. Verify price is visible and the request waits for owner approval.
+5. Confirm there is no card entry, checkout, payment capture, or receipt UI.
+6. Booking copy should say payment is direct with the studio.
+7. Open the owner approval email link and verify the guest receives an approval email.
+
+## Soft Launch Smoke Test
+
+Run this before every production-like check:
+
+```powershell
+npm run test:soft-launch -w apps/api
+npm run typecheck
+npm run build
+```
+
+The automated smoke creates an owner draft, uploads owner media through the storage boundary, verifies owner email, publishes a listing, checks the public listing redacts owner/private fields, verifies guest booking email, creates a booking request, follows the owner approval link, and confirms the guest approval email path. It does not send real email or upload to real R2; use the manual scripts below for provider verification.
 
 ## Manual Payment Limitations
 
@@ -103,4 +117,7 @@ Manual payment mode does not collect cards, deposits, payouts, refunds, invoices
 - Web owner chat can create a draft, upload photos, verify email, and publish.
 - Telegram owner flow can create a text draft and accept photos.
 - Public listing API (`/api/studios/:slug`) hides owner/private fields.
+- Guest booking request requires verified email.
+- Owner booking request email includes a confirm-booking link.
+- Guest receives approval email after owner confirmation.
 - Booking flow shows prices and direct studio payment instructions, with no online payment capture.

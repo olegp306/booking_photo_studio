@@ -1038,7 +1038,7 @@ git push origin main
 
 **Purpose:** Make the first real test run repeatable by the owner of the project.
 
-- [ ] Update `README.md`.
+- [x] Update `README.md`.
 
 Sections:
 
@@ -1055,7 +1055,7 @@ Telegram owner onboarding test script
 Manual payment limitations
 ```
 
-- [ ] Add a launch checklist to README.
+- [x] Add a launch checklist to README.
 
 Checklist:
 
@@ -1075,7 +1075,7 @@ Public listing hides owner private data
 Booking path shows direct payment copy
 ```
 
-- [ ] Run final verification.
+- [x] Run final verification.
 
 Commands:
 
@@ -1086,7 +1086,17 @@ npm run build
 git status --short
 ```
 
-- [ ] Browser smoke test:
+- [x] Automated soft-launch smoke test:
+
+```text
+npm run test:soft-launch -w apps/api
+
+The smoke covers owner web onboarding, media upload through the storage boundary,
+owner email OTP, publish, public listing redaction, guest email OTP, booking request,
+owner approval link, guest approval email, and manual-at-studio payment mode.
+```
+
+- [ ] Manual browser/provider smoke test:
 
 ```text
 Open http://localhost:5173/
@@ -1095,13 +1105,14 @@ Create a draft with text.
 Attach a real local image.
 See AI draft.
 Enter email.
-Enter 6-digit code from test output or Resend.
+Enter 6-digit code from Resend.
 Publish draft.
 Open explore view and verify listing appears without private owner fields.
-Create a booking request and verify direct payment copy.
+Create a booking request, verify guest email, and verify direct payment copy.
+Follow the owner approval email link and verify the guest approval email arrives.
 ```
 
-- [ ] Commit docs and final polish:
+- [x] Commit docs and final polish:
 
 ```powershell
 git add README.md .env.example

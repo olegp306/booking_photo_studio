@@ -1186,7 +1186,7 @@ describe("App", () => {
     );
     await user.click(screen.getByRole("button", { name: "Generate listing draft" }));
 
-    expect(await screen.findByDisplayValue("Soft daylight studio for fashion and product shoots.")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Soft Daylight Studio.")).toBeInTheDocument();
     expect(screen.getByText("Draft generated with local fallback. Add OPENAI_API_KEY to use live AI.")).toBeInTheDocument();
     const detectedFilters = within(screen.getByLabelText("Detected listing filters"));
     expect(detectedFilters.getByText("Fashion")).toBeInTheDocument();
