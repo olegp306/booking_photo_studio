@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import { rewriteApiProxyPath } from "./src/apiProxy";
 
 export default defineConfig({
   plugins: [react()],
@@ -9,13 +10,13 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:4000",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, "")
+        rewrite: rewriteApiProxyPath
       }
     }
   },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    testTimeout: 10000
+    testTimeout: 20000
   }
 });

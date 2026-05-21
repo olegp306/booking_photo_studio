@@ -55,7 +55,16 @@ export interface ProductionOnboardingReadiness {
   nextSteps: string[];
 }
 
-const hasValue = (value?: string) => Boolean(value?.trim());
+const placeholderPatterns = [
+  /^replace-with-/i,
+  /USER:PASSWORD/i,
+  /your-domain\.com/i
+];
+
+const isPlaceholderValue = (value?: string) =>
+  Boolean(value?.trim()) && placeholderPatterns.some((pattern) => pattern.test(value?.trim() ?? ""));
+
+const hasValue = (value?: string) => Boolean(value?.trim()) && !isPlaceholderValue(value);
 const parseBoolean = (value?: string) => value?.trim().toLowerCase() === "true";
 const readinessValue = (configured: boolean) => configured ? "configured" as const : "missing" as const;
 
@@ -84,6 +93,13 @@ const findEnvFile = (fileName: string) => {
 };
 
 const loadEnvFileValues = () => {
+  if (process.env.NODE_ENV === "test") {
+    return {
+      envFile: ".env.local",
+      values: {}
+    };
+  }
+
   const localFile = findEnvFile(".env.local");
   const fallbackFile = findEnvFile(".env");
   const filePath = localFile ?? fallbackFile;

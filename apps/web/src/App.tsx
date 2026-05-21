@@ -32,6 +32,7 @@ import {
   type OwnerMedia,
   type OwnerOnboardingDraft,
   type OwnerListingUpdate,
+  type PublishedStudioListing,
   type SharedShortlistItem,
   type ShortlistDecision,
   type ShootType,
@@ -61,6 +62,7 @@ import {
   loadStudios,
   loadSupportTickets,
   loadTelegramMiniAppDrafts,
+  publishOwnerDraft,
   releaseOwnerAvailabilityBlock,
   setupTelegramWebhook,
   startOwnerOnboarding,
@@ -687,46 +689,82 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
   const [code, setCode] = useState("");
   const [emailRequested, setEmailRequested] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [publishedListing, setPublishedListing] = useState<PublishedStudioListing | undefined>();
   const [status, setStatus] = useState("");
 
   const createDraft = async (event: FormEvent) => {
     event.preventDefault();
-    const text = description.trim();
-    if (!text) return;
+    const text = description.trim() || (files.length > 0 ? "Photos uploaded for review." : "");
+    if (!text) {
+      setStatus("Add a short description or at least one photo to create a draft.");
+      return;
+    }
     setStatus("Creating draft...");
-    const nextDraft = await startOwnerOnboarding({ source: "web", text });
-    const media = await Promise.all(
-      files.map((file) =>
-        uploadOwnerMedia({
-          draftId: nextDraft.id,
-          file,
-          ownerSessionToken: nextDraft.ownerSessionToken
-        })
-      )
-    );
-    setDraft({ ...nextDraft, media: [...nextDraft.media, ...media] });
-    setUploadedMedia(media);
-    setStatus("");
+    try {
+      const nextDraft = await startOwnerOnboarding({ source: "web", text });
+      const media = await Promise.all(
+        files.map((file) =>
+          uploadOwnerMedia({
+            draftId: nextDraft.id,
+            file,
+            ownerSessionToken: nextDraft.ownerSessionToken
+          })
+        )
+      );
+      setDraft({ ...nextDraft, media: [...nextDraft.media, ...media] });
+      setUploadedMedia(media);
+      setStatus("Draft created. Review it below.");
+    } catch {
+      setStatus("Could not create the draft. Check the API and storage settings, then try again.");
+    }
   };
 
   const requestCode = async (event: FormEvent) => {
     event.preventDefault();
     if (!draft || !email.trim()) return;
-    await requestOwnerEmailCode({ draftId: draft.id, email: email.trim() });
-    setEmailRequested(true);
+    setStatus("Sending email code...");
+    try {
+      await requestOwnerEmailCode({ draftId: draft.id, email: email.trim() });
+      setEmailRequested(true);
+      setStatus("Email code sent.");
+    } catch {
+      setStatus("Could not send email code. Check the email sender settings and try again.");
+    }
   };
 
   const verifyCode = async (event: FormEvent) => {
     event.preventDefault();
     if (!/^\d{6}$/.test(code) || !email.trim()) return;
-    const session = await verifyOwnerEmailCode({ email: email.trim(), code });
-    setEmailVerified(session.emailVerified);
-    if (draft) setDraft({ ...draft, ownerSessionToken: session.ownerSessionToken });
+    setStatus("Verifying email...");
+    try {
+      const session = await verifyOwnerEmailCode({ email: email.trim(), code });
+      setEmailVerified(session.emailVerified);
+      if (draft) setDraft({ ...draft, ownerSessionToken: session.ownerSessionToken });
+      setStatus(session.emailVerified ? "Email verified." : "Email code was not verified.");
+    } catch {
+      setStatus("Could not verify email code. Check the 6-digit code and try again.");
+    }
+  };
+
+  const publishDraft = async () => {
+    if (!draft?.ownerSessionToken) {
+      setStatus("Verify email before publishing this draft.");
+      return;
+    }
+    setStatus("Publishing draft...");
+    try {
+      const listing = await publishOwnerDraft({ draftId: draft.id, ownerSessionToken: draft.ownerSessionToken });
+      setPublishedListing(listing);
+      setDraft({ ...draft, status: "published" });
+      setStatus("Draft published.");
+    } catch {
+      setStatus("Could not publish draft. Verify email and complete any required account details.");
+    }
   };
 
   return (
     <aside className="owner-drawer" role="dialog" aria-label="Create your studio profile">
-      <div className="support-drawer-head">
+      <div className="support-drawer-head owner-drawer-head">
         <div>
           <p className="eyebrow">Studio owners</p>
           <h2>Create your studio profile</h2>
@@ -743,7 +781,6 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Tell us the city, rooms, light, equipment, price, and house rules."
-            required
           />
         </label>
         <label>
@@ -767,7 +804,7 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
         </button>
       </form>
 
-      {status && <p className="booking-status">{status}</p>}
+      {status && <p className="booking-status" role="status">{status}</p>}
 
       {draft && (
         <section className="owner-draft-preview" aria-label="Studio draft preview">
@@ -777,7 +814,7 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
           {draft.description && <p>{draft.description}</p>}
           <div className="owner-draft-tags">
             {draft.suggestedAmenities.map((amenity) => <span key={amenity}>{amenity}</span>)}
-            {draft.missingFields.map((field) => <span key={field}>Missing {field}</span>)}
+            {draft.missingFields.map((field) => <span key={field}>Review {field}</span>)}
           </div>
           {uploadedMedia.length > 0 && (
             <div className="owner-photo-list">
@@ -817,9 +854,19 @@ const OwnerOnboardingDrawer = ({ onClose }: { onClose: () => void }) => {
               </button>
             </form>
           )}
-          <button className="request-button" disabled={!emailVerified} type="button">
-            Publish draft
+          <button
+            className="request-button"
+            disabled={!emailVerified || draft.status === "published"}
+            onClick={publishDraft}
+            type="button"
+          >
+            {draft.status === "published" ? "Published" : "Publish draft"}
           </button>
+          {publishedListing?.publicUrl && (
+            <a className="request-button secondary owner-published-link" href={publishedListing.publicUrl}>
+              Open published listing
+            </a>
+          )}
         </section>
       )}
     </aside>

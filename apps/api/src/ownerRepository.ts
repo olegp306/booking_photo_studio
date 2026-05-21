@@ -98,6 +98,7 @@ export interface OwnerRepository {
   findOrCreateOwnerByEmail(email: string): Promise<OwnerSession>;
   getOwnerSession(userId: string): Promise<OwnerSession | null>;
   getDraft(draftId: string): Promise<OwnerOnboardingDraft | null>;
+  listPublishedDrafts(): Promise<OwnerOnboardingDraft[]>;
   getDraftMedia(draftId: string): Promise<OwnerMedia[]>;
   createDraft(input: CreateOwnerDraftInput): Promise<OwnerOnboardingDraft>;
   appendDraftText(input: AppendDraftTextInput): Promise<OwnerOnboardingDraft>;
@@ -107,6 +108,288 @@ export interface OwnerRepository {
 }
 
 const now = () => new Date().toISOString();
+const toIso = (value: Date | string | null | undefined) =>
+  value instanceof Date ? value.toISOString() : value ?? undefined;
+
+const toOwnerUser = (user: any): OwnerUser => ({
+  id: user.id,
+  email: user.email ?? undefined,
+  emailVerified: toIso(user.emailVerified),
+  displayName: user.displayName ?? undefined,
+  createdAt: toIso(user.createdAt) ?? now(),
+  updatedAt: toIso(user.updatedAt) ?? now()
+});
+
+const toOwnerProfile = (profile: any): OwnerProfile => ({
+  id: profile.id,
+  userId: profile.userId,
+  status: profile.status === "published" ? "published" : "draft",
+  studioName: profile.studioName ?? undefined,
+  city: profile.city ?? undefined,
+  createdAt: toIso(profile.createdAt) ?? now(),
+  updatedAt: toIso(profile.updatedAt) ?? now()
+});
+
+const toTelegramOwnerInput = (identity: any): TelegramOwnerInput | undefined =>
+  identity
+    ? {
+        telegramUserId: identity.telegramUserId,
+        username: identity.username ?? undefined,
+        firstName: identity.firstName ?? undefined
+      }
+    : undefined;
+
+const toOwnerSession = (record: any): OwnerSession => ({
+  user: toOwnerUser(record),
+  ownerProfile: toOwnerProfile(record.ownerProfile),
+  telegram: toTelegramOwnerInput(record.telegramLinks?.[0] ?? record.telegram)
+});
+
+const toOwnerDraft = (draft: any): OwnerOnboardingDraft => ({
+  id: draft.id,
+  ownerProfileId: draft.ownerProfileId,
+  source: draft.source === "telegram" ? "telegram" : "web",
+  status: ["collecting", "draft_ready", "email_pending", "published"].includes(draft.status) ? draft.status : "collecting",
+  rawText: draft.rawText,
+  aiDraftJson: draft.aiDraftJson ?? undefined,
+  createdAt: toIso(draft.createdAt) ?? now(),
+  updatedAt: toIso(draft.updatedAt) ?? now()
+});
+
+const toOwnerMedia = (media: any): OwnerMedia => ({
+  id: media.id,
+  ownerProfileId: media.ownerProfileId,
+  draftId: media.draftId ?? undefined,
+  kind: ["interior", "equipment", "sample", "document"].includes(media.kind) ? media.kind : "interior",
+  fileName: media.fileName,
+  mimeType: media.mimeType,
+  storageKey: media.storageKey,
+  publicUrl: media.publicUrl,
+  sortOrder: media.sortOrder,
+  aiTagsJson: media.aiTagsJson ?? undefined,
+  createdAt: toIso(media.createdAt) ?? now()
+});
+
+export const createPrismaOwnerRepository = (database: any): OwnerRepository => {
+  const includeOwnerSession = {
+    ownerProfile: true,
+    telegramLinks: true
+  };
+
+  const ensureOwnerSession = async (record: any) => {
+    if (record.ownerProfile) return record;
+    const profile = await database.ownerProfile.create({
+      data: {
+        userId: record.id,
+        status: "draft"
+      }
+    });
+    return {
+      ...record,
+      ownerProfile: profile,
+      telegramLinks: record.telegramLinks ?? []
+    };
+  };
+
+  const findUserSession = async (userId: string) => {
+    const user = await database.user.findUnique({
+      where: { id: userId },
+      include: includeOwnerSession
+    });
+    return user ? ensureOwnerSession(user) : null;
+  };
+
+  return {
+    async createAnonymousOwner() {
+      const user = await database.user.create({
+        data: {
+          ownerProfile: {
+            create: {
+              status: "draft"
+            }
+          }
+        },
+        include: includeOwnerSession
+      });
+      return toOwnerSession(await ensureOwnerSession(user));
+    },
+
+    async findOrCreateOwnerByTelegram(input) {
+      const existing = await database.telegramIdentity.findUnique({
+        where: {
+          telegramUserId: input.telegramUserId
+        },
+        include: {
+          user: {
+            include: includeOwnerSession
+          }
+        }
+      });
+      if (existing?.user) {
+        return toOwnerSession(await ensureOwnerSession(existing.user));
+      }
+
+      const user = await database.user.create({
+        data: {
+          displayName: input.firstName,
+          ownerProfile: {
+            create: {
+              status: "draft"
+            }
+          },
+          telegramLinks: {
+            create: {
+              telegramUserId: input.telegramUserId,
+              username: input.username,
+              firstName: input.firstName
+            }
+          }
+        },
+        include: includeOwnerSession
+      });
+      return toOwnerSession(await ensureOwnerSession(user));
+    },
+
+    async findOrCreateOwnerByEmail(email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      const existing = await database.user.findUnique({
+        where: {
+          email: normalizedEmail
+        },
+        include: includeOwnerSession
+      });
+      if (existing) {
+        return toOwnerSession(await ensureOwnerSession(existing));
+      }
+
+      const user = await database.user.create({
+        data: {
+          email: normalizedEmail,
+          ownerProfile: {
+            create: {
+              status: "draft"
+            }
+          }
+        },
+        include: includeOwnerSession
+      });
+      return toOwnerSession(await ensureOwnerSession(user));
+    },
+
+    async getOwnerSession(userId) {
+      const session = await findUserSession(userId);
+      return session ? toOwnerSession(session) : null;
+    },
+
+    async getDraft(draftId) {
+      const draft = await database.ownerOnboardingDraft.findUnique({
+        where: {
+          id: draftId
+        }
+      });
+      return draft ? toOwnerDraft(draft) : null;
+    },
+
+    async listPublishedDrafts() {
+      const rows = await database.ownerOnboardingDraft.findMany({
+        where: {
+          status: "published"
+        },
+        orderBy: {
+          updatedAt: "desc"
+        }
+      });
+      return rows.map(toOwnerDraft);
+    },
+
+    async getDraftMedia(draftId) {
+      const rows = await database.ownerMedia.findMany({
+        where: {
+          draftId
+        },
+        orderBy: {
+          sortOrder: "asc"
+        }
+      });
+      return rows.map(toOwnerMedia);
+    },
+
+    async createDraft(input) {
+      const draft = await database.ownerOnboardingDraft.create({
+        data: {
+          ownerProfileId: input.ownerProfileId,
+          source: input.source,
+          rawText: input.rawText,
+          status: "collecting"
+        }
+      });
+      return toOwnerDraft(draft);
+    },
+
+    async appendDraftText(input) {
+      const draft = await this.getDraft(input.draftId);
+      if (!draft) throw new Error(`Owner draft ${input.draftId} was not found.`);
+      const updated = await database.ownerOnboardingDraft.update({
+        where: {
+          id: input.draftId
+        },
+        data: {
+          rawText: [draft.rawText, input.text.trim()].filter(Boolean).join("\n")
+        }
+      });
+      return toOwnerDraft(updated);
+    },
+
+    async attachMedia(input) {
+      const sortOrder = input.sortOrder ?? (await database.ownerMedia.count({
+        where: {
+          draftId: input.draftId ?? null
+        }
+      })) + 1;
+      const media = await database.ownerMedia.create({
+        data: {
+          ownerProfileId: input.ownerProfileId,
+          draftId: input.draftId,
+          kind: input.kind,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          storageKey: input.storageKey,
+          publicUrl: input.publicUrl,
+          sortOrder,
+          aiTagsJson: input.aiTagsJson
+        }
+      });
+      return toOwnerMedia(media);
+    },
+
+    async saveAiDraft(input) {
+      const draft = await database.ownerOnboardingDraft.update({
+        where: {
+          id: input.draftId
+        },
+        data: {
+          aiDraftJson: input.aiDraftJson,
+          status: input.status ?? "draft_ready"
+        }
+      });
+      return toOwnerDraft(draft);
+    },
+
+    async markEmailVerified(input) {
+      const user = await database.user.update({
+        where: {
+          id: input.userId
+        },
+        data: {
+          email: input.email.trim().toLowerCase(),
+          emailVerified: input.verifiedAt ?? new Date()
+        },
+        include: includeOwnerSession
+      });
+      return toOwnerSession(await ensureOwnerSession(user));
+    }
+  };
+};
 
 export const createInMemoryOwnerRepository = (): OwnerRepository => {
   const sessions = new Map<string, OwnerSession>();
@@ -178,6 +461,12 @@ export const createInMemoryOwnerRepository = (): OwnerRepository => {
 
     async getDraft(draftId) {
       return drafts.get(draftId) ?? null;
+    },
+
+    async listPublishedDrafts() {
+      return Array.from(drafts.values())
+        .filter((draft) => draft.status === "published")
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     },
 
     async getDraftMedia(draftId) {

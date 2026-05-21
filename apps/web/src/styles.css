@@ -143,6 +143,10 @@ h2 {
   right: auto;
 }
 
+.owner-drawer-head {
+  padding: 6px 16px 0;
+}
+
 .owner-chat-form,
 .owner-email-form,
 .support-form {
@@ -202,6 +206,11 @@ h2 {
   display: grid;
   gap: 12px;
   border-top: 1px solid #eadfd2;
+}
+
+.owner-published-link {
+  justify-content: center;
+  text-decoration: none;
 }
 
 .owner-email-form {

@@ -63,6 +63,27 @@ const emptyAiDraft = (rawText: string): AiOwnerDraft => ({
   suggestedRooms: []
 });
 
+const inferStudioName = (draft: PublicOwnerDraft) =>
+  draft.studioName?.trim() ||
+  draft.rawText.split(/[\n,.]/).map((part) => part.trim()).filter(Boolean)[0]?.slice(0, 80) ||
+  "Untitled studio";
+
+const inferCity = (draft: PublicOwnerDraft) => {
+  const haystack = [draft.city, draft.rawText].filter(Boolean).join(" ").toLowerCase();
+  if (haystack.includes("prague") || haystack.includes("praha")) return "Prague";
+  return draft.city?.trim() || "Unknown city";
+};
+
+const publishedStudioSlug = (draft: PublicOwnerDraft) => {
+  const base = inferStudioName(draft)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 56);
+  const suffix = draft.id.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return [base || "owner-studio", suffix].filter(Boolean).join("-");
+};
+
 const toPublicMedia = (media: Awaited<ReturnType<OwnerRepository["getDraftMedia"]>>): PublicOwnerMedia[] =>
   media.map((item) => ({
     id: item.id,
@@ -163,14 +184,22 @@ export function createOwnerOnboardingService(deps: OwnerOnboardingDeps): OwnerOn
         status: "published"
       });
       const publicDraft = await buildPublicDraft(saved);
+      const studioSlug = publishedStudioSlug(publicDraft);
 
       return {
-        id: `published_${saved.id}`,
+        id: studioSlug,
         draftId: saved.id,
-        studioName: publicDraft.studioName ?? "Untitled studio",
-        city: publicDraft.city ?? "Unknown city",
-        status: "published"
+        studioName: inferStudioName(publicDraft),
+        city: inferCity(publicDraft),
+        status: "published",
+        publicUrl: `#studio/${studioSlug}`
       };
     }
   };
 }
+
+export const ownerDraftPublishing = {
+  inferStudioName,
+  inferCity,
+  publishedStudioSlug
+};

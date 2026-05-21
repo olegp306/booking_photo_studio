@@ -60,10 +60,12 @@ import {
 import { createEmailService, createResendEmailService, type EmailService } from "./email";
 import {
   createInMemoryOwnerRepository,
+  createPrismaOwnerRepository,
   type OwnerRepository,
   type OwnerSession as OwnerRepositorySession
 } from "./ownerRepository";
-import { createOwnerOnboardingService } from "./ownerOnboarding";
+import { createPrismaClient } from "./db";
+import { createOwnerOnboardingService, ownerDraftPublishing } from "./ownerOnboarding";
 import { getPaymentInstructions, getPaymentMode, type PaymentMode } from "./paymentMode";
 import { createR2StorageService, createStorageService, type StorageService } from "./storage";
 import {
@@ -242,10 +244,31 @@ const createRateLimiter = () => {
   };
 };
 
+const getPrismaDatabaseUrl = (config: RuntimeConfig) => {
+  const databaseUrl = config.databaseUrl?.trim();
+  if (!databaseUrl || process.env.NODE_ENV === "test") return undefined;
+  return /USER:PASSWORD|replace-with-|your-domain\.com/i.test(databaseUrl) ? undefined : databaseUrl;
+};
+
+const extractOwnerDraftPrice = (text: string) => {
+  const match = text.match(/(\d[\d\s.,]*)\s*(czk|kč|eur|€)/i);
+  if (!match) return undefined;
+  const amount = Number(match[1].replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : undefined;
+};
+
+const knownIds = <T extends string>(values: string[] | undefined, dictionary: Record<string, unknown>) =>
+  (values ?? []).filter((value): value is T => Object.prototype.hasOwnProperty.call(dictionary, value));
+
 export const buildServer = (options: BuildServerOptions = {}) => {
   const config = loadRuntimeConfig(options.config);
   const fetchImpl = options.fetch ?? fetch;
-  const ownerRepository = options.services?.ownerRepository ?? createInMemoryOwnerRepository();
+  const prismaDatabaseUrl = getPrismaDatabaseUrl(config);
+  const ownerRepository = options.services?.ownerRepository ?? (
+    prismaDatabaseUrl
+      ? createPrismaOwnerRepository(createPrismaClient(prismaDatabaseUrl))
+      : createInMemoryOwnerRepository()
+  );
   const emailService = options.services?.email ?? (
     config.resendApiKey && config.emailFrom
       ? createResendEmailService({ apiKey: config.resendApiKey, from: config.emailFrom })
@@ -414,6 +437,114 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     props: [...studio.props],
     rules: [...studio.rules]
   }));
+  const toOwnerDraftPublicShape = (draft: Awaited<ReturnType<OwnerRepository["listPublishedDrafts"]>>[number]) => {
+    const aiDraft = (draft.aiDraftJson ?? {}) as {
+      studioName?: string;
+      city?: string;
+      description?: string;
+      suggestedAmenities?: string[];
+      suggestedRules?: string[];
+      suggestedRooms?: Array<{
+        name: string;
+        styleTags?: string[];
+        lightTags?: string[];
+        props?: string[];
+      }>;
+    };
+    return {
+      id: draft.id,
+      source: draft.source,
+      status: draft.status,
+      rawText: draft.rawText,
+      studioName: aiDraft.studioName,
+      city: aiDraft.city,
+      description: aiDraft.description,
+      suggestedAmenities: aiDraft.suggestedAmenities ?? [],
+      suggestedRules: aiDraft.suggestedRules ?? [],
+      suggestedRooms: (aiDraft.suggestedRooms ?? []).map((room) => ({
+        name: room.name,
+        styleTags: room.styleTags ?? [],
+        lightTags: room.lightTags ?? [],
+        props: room.props ?? []
+      })),
+      media: [],
+      missingFields: []
+    };
+  };
+  const createStudioFromPublishedOwnerDraft = async (
+    draft: Awaited<ReturnType<OwnerRepository["listPublishedDrafts"]>>[number]
+  ): Promise<Studio> => {
+    const publicDraft = toOwnerDraftPublicShape(draft);
+    const slug = ownerDraftPublishing.publishedStudioSlug(publicDraft);
+    const media = await ownerRepository.getDraftMedia(draft.id);
+    const priceFrom = extractOwnerDraftPrice(draft.rawText) ?? 1000;
+    const featureIds = knownIds<FeatureId>(publicDraft.suggestedAmenities, taxonomy.features);
+    const amenityIds = knownIds<AmenityId>(publicDraft.suggestedAmenities, taxonomy.amenities);
+    const roomImageIds = media
+      .filter((item) => item.mimeType.startsWith("image/"))
+      .map((item) => `owner-${item.id}`);
+    const images = media
+      .filter((item) => item.mimeType.startsWith("image/"))
+      .map((item, index) => ({
+        id: `owner-${item.id}`,
+        url: item.publicUrl,
+        alt: `${ownerDraftPublishing.inferStudioName(publicDraft)} uploaded studio photo ${index + 1}`,
+        kind: index === 0 ? "hero" as const : item.kind === "equipment" ? "equipment" as const : item.kind === "sample" ? "example" as const : "room" as const,
+        roomId: `${slug}-main`
+      }));
+
+    return {
+      id: slug,
+      slug,
+      name: ownerDraftPublishing.inferStudioName(publicDraft),
+      city: seedStudios[0].city,
+      district: ownerDraftPublishing.inferCity(publicDraft),
+      addressHint: ownerDraftPublishing.inferCity(publicDraft),
+      latitude: seedStudios[0].latitude,
+      longitude: seedStudios[0].longitude,
+      rating: 0,
+      reviewCount: 0,
+      priceFrom,
+      currency: seedStudios[0].currency,
+      bookingMode: "request",
+      ownerName: "Studio owner",
+      listingStatus: "published",
+      tagline: publicDraft.description || publicDraft.rawText || "Owner-submitted studio available by request.",
+      description: publicDraft.description || publicDraft.rawText || "Owner-submitted studio available by request.",
+      moodTags: ["owner-submitted"],
+      shootTypes: [],
+      featureIds,
+      equipmentIds: [],
+      amenityIds,
+      props: [],
+      accessNotes: "Confirm access details directly with the studio.",
+      cancellationPolicy: "Confirm cancellation terms directly with the studio.",
+      images: images.length > 0 ? images : [{
+        id: `${slug}-hero`,
+        url: seedStudios[0].images[0].url,
+        alt: `${ownerDraftPublishing.inferStudioName(publicDraft)} studio placeholder`,
+        kind: "hero"
+      }],
+      rooms: [{
+        id: `${slug}-main`,
+        name: publicDraft.suggestedRooms[0]?.name || "Main Studio Room",
+        summary: publicDraft.description || publicDraft.rawText || "Owner-submitted studio room.",
+        areaSqm: 60,
+        ceilingHeightM: 3,
+        capacity: 8,
+        pricePerHour: priceFrom,
+        bookingMode: "request",
+        featureIds,
+        equipmentIds: [],
+        imageIds: roomImageIds
+      }],
+      rules: publicDraft.suggestedRules
+    };
+  };
+  const getCatalogStudios = async () => [
+    ...studios,
+    ...await Promise.all((await ownerRepository.listPublishedDrafts()).map(createStudioFromPublishedOwnerDraft))
+  ];
   const bookingIntentStore = createJsonResourceStore<BookingIntent>(config.localDataDir, "booking-intents.json");
   const shortlistStore = createJsonResourceStore<SharedShortlist>(config.localDataDir, "shared-shortlists.json");
   const availabilityBlockStore = createJsonResourceStore<OwnerAvailabilityBlock>(config.localDataDir, "availability-blocks.json");
@@ -1122,6 +1253,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       bookingMode?: BookingMode;
     };
   }>("/studios", async (request) => {
+    const catalogStudios = await getCatalogStudios();
     const filters: StudioSearchFilters = {
       cityId: request.query.cityId,
       query: request.query.query,
@@ -1132,15 +1264,16 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       amenityIds: toArray<AmenityId>(request.query.amenityIds),
       bookingMode: request.query.bookingMode
     };
+    const results = searchStudios(catalogStudios, filters);
 
     return {
-      studios: searchStudios(studios, filters),
-      total: searchStudios(studios, filters).length
+      studios: results,
+      total: results.length
     };
   });
 
   app.get<{ Params: { slug: string } }>("/studios/:slug", async (request, reply) => {
-    const studio = findStudioBySlug(studios, request.params.slug);
+    const studio = findStudioBySlug(await getCatalogStudios(), request.params.slug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -1153,7 +1286,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   });
 
   const sendPublicStudio = async (slug: string, metricPath: string, reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }) => {
-    const studio = findStudioBySlug(studios, slug);
+    const studio = findStudioBySlug(await getCatalogStudios(), slug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -1199,7 +1332,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
       amenityIds: toArray<AmenityId>(request.query.amenityIds),
       bookingMode: request.query.bookingMode
     };
-    const allResults = searchStudios(studios, filters);
+    const allResults = searchStudios(await getCatalogStudios(), filters);
     const start = Math.max(0, Number(request.query.cursor ?? 0) || 0);
     const limit = Math.min(24, Math.max(1, Number(request.query.limit ?? 12) || 12));
     const page = allResults.slice(start, start + limit);
@@ -1220,7 +1353,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
     Params: { slug: string };
     Querystring: { date?: string; durationHours?: string };
   }>("/studios/:slug/availability", async (request, reply) => {
-    const studio = findStudioBySlug(studios, request.params.slug);
+    const studio = findStudioBySlug(await getCatalogStudios(), request.params.slug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -1263,7 +1396,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.post<{
     Body: Omit<OwnerAvailabilityBlock, "id">;
   }>("/owner/availability-blocks", async (request, reply) => {
-    const studio = findStudioBySlug(studios, request.body.studioSlug);
+    const studio = findStudioBySlug(await getCatalogStudios(), request.body.studioSlug);
 
     if (!studio) {
       return reply.code(404).send({
@@ -1318,7 +1451,7 @@ export const buildServer = (options: BuildServerOptions = {}) => {
   app.post<{
     Body: BookingIntentRequest & { studioSlug: string };
   }>("/booking-requests", async (request, reply) => {
-    const studio = findStudioBySlug(studios, request.body.studioSlug);
+    const studio = findStudioBySlug(await getCatalogStudios(), request.body.studioSlug);
 
     if (!studio) {
       return reply.code(404).send({
