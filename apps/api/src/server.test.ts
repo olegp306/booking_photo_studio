@@ -1090,6 +1090,7 @@ describe("studio API", () => {
         webAppUrl: "https://studio.example.com",
         sentMessage: true,
         draft: expect.objectContaining({
+          tagline: "Soft Daylight Studio.",
           shootTypes: ["fashion"],
           featureIds: expect.arrayContaining(["natural-light", "cyclorama"])
         })
@@ -1113,7 +1114,10 @@ describe("studio API", () => {
       expect.objectContaining({
         id: "telegram-draft-1",
         source: "telegram",
-        transcript: "Soft daylight studio for fashion shoots with cyclorama and softboxes"
+        transcript: "Soft daylight studio for fashion shoots with cyclorama and softboxes",
+        draft: expect.objectContaining({
+          tagline: "Soft Daylight Studio."
+        })
       })
     ]);
   });
