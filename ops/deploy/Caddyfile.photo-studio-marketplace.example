@@ -16,3 +16,27 @@
 		reverse_proxy 127.0.0.1:3001
 	}
 }
+
+:3003 {
+	encode zstd gzip
+	root * /opt/apps/photo-studio-marketplace/apps/web/dist
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:4003
+	}
+
+	handle /photo-studio-marketplace/api/* {
+		uri strip_prefix /photo-studio-marketplace
+		reverse_proxy 127.0.0.1:4003
+	}
+
+	handle_path /photo-studio-marketplace* {
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

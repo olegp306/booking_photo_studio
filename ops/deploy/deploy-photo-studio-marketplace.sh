@@ -8,7 +8,7 @@ REPO_URL="${REPO_URL:-https://github.com/olegp306/booking_photo_studio.git}"
 BRANCH="${BRANCH:-main}"
 API_SERVICE="${SITE_NAME}-api.service"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-photo_studio_marketplace}"
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-http://204.168.163.99/${SITE_NAME}/}"
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-http://204.168.163.99:3003/}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run this script as root on the Hetzner VM." >&2
