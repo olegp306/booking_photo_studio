@@ -41,7 +41,7 @@ Recommended ports:
 - Photo Studio Postgres: `127.0.0.1:15433`
 - Public traffic: reverse proxy on `80` and `443`
 
-The web app is a Vite static build, not a long-running Next.js service. Production should serve `apps/web/dist` through the reverse proxy. The API should run as a Node systemd service from `apps/api/dist/index.js`.
+The web app is a Vite static build, not a long-running Next.js service. Production should serve `apps/web/dist` through the reverse proxy. The API should run as a Node systemd service through the repository's production API start script. The current TypeScript build is still required for verification, but its ESM output is not directly Node-runnable until extension-safe Node ESM packaging is added.
 
 ## Reverse Proxy
 
@@ -162,7 +162,7 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=4003
 EnvironmentFile=/opt/apps/photo-studio-marketplace/.env
-ExecStart=/usr/bin/node apps/api/dist/index.js
+ExecStart=/usr/bin/npm run start -w apps/api
 Restart=always
 RestartSec=5
 
