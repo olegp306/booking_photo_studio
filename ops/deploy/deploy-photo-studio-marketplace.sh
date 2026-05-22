@@ -79,7 +79,17 @@ systemctl enable "${API_SERVICE}"
 systemctl restart "${API_SERVICE}"
 
 systemctl is-active "${API_SERVICE}"
-curl -fsS --max-time 20 http://127.0.0.1:4003/health
+
+for attempt in {1..20}; do
+  if curl -fsS --max-time 5 http://127.0.0.1:4003/health >/dev/null; then
+    break
+  fi
+  if [[ "${attempt}" -eq 20 ]]; then
+    curl -fsS --max-time 5 http://127.0.0.1:4003/health
+  fi
+  sleep 1
+done
+
 curl -fsS --max-time 20 http://127.0.0.1:4003/api/readiness
 
 if [[ -n "${PUBLIC_HEALTH_URL}" ]]; then
