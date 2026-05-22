@@ -1,0 +1,18 @@
+[Unit]
+Description=Photo Studio Marketplace API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/apps/photo-studio-marketplace
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=4003
+EnvironmentFile=/opt/apps/photo-studio-marketplace/.env
+ExecStart=/usr/bin/npm run start -w apps/api
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

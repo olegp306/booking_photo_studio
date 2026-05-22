@@ -39,7 +39,8 @@ import {
   type UserSession
 } from "@studio-market/shared";
 
-const API_BASE = "/api";
+const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API_BASE = `${appBasePath}/api`;
 export type AiDraftMode = "local-fallback" | "openai";
 export type ImportedDraftMode = "local-fallback" | "openai";
 export type {

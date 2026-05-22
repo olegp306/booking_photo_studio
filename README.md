@@ -121,3 +121,18 @@ Manual payment mode does not collect cards, deposits, payouts, refunds, invoices
 - Owner booking request email includes a confirm-booking link.
 - Guest receives approval email after owner confirmation.
 - Booking flow shows prices and direct studio payment instructions, with no online payment capture.
+
+## Hetzner Multi-Site Deployment
+
+Deployment design is documented in `docs/superpowers/specs/2026-05-22-hetzner-multi-site-photo-studio-deploy-design.md`.
+
+Repository-owned deployment artifacts live in `ops/`:
+
+- `ops/staging/docker-compose.yml` runs this project's Postgres on `127.0.0.1:15433`.
+- `ops/deploy/photo-studio-marketplace-api.service` runs the Fastify API on `127.0.0.1:4003`.
+- `ops/deploy/Caddyfile.photo-studio-marketplace.example` shows the prefix-scoped `/photo-studio-marketplace` route and `/photo-studio-marketplace/api/*` proxy.
+- `ops/deploy/PORTS.example.md` is the starting point for `/opt/apps/PORTS.md` on the VM.
+- `ops/deploy/env.production.example` shows the server-local `.env` shape.
+- `ops/deploy/deploy-photo-studio-marketplace.sh` performs a repeatable server-side deploy.
+
+Production secrets stay in `/opt/apps/photo-studio-marketplace/.env` on the VM and must not be committed. Use classic `docker-compose` on the VM unless the Docker Compose plugin is installed and verified.

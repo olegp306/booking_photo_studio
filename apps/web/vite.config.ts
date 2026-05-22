@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 import { rewriteApiProxyPath } from "./src/apiProxy";
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react()],
   server: {
     port: 5173,
